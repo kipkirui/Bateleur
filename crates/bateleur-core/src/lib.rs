@@ -2,10 +2,12 @@ use serde::{Deserialize, Serialize};
 
 mod autoconfig;
 mod classify;
+mod folders;
 mod text;
 
 pub use autoconfig::{guess_servers, ServerGuess};
 pub use classify::classify_feed;
+pub use folders::{classify_imap_folder, ClassifiedFolder};
 pub use text::{html_to_plain, preview_text};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,9 +67,20 @@ pub struct Message {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MailFolder {
+    pub account_id: String,
+    pub canonical: String,
+    pub imap_name: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Mailbox {
     pub accounts: Vec<Account>,
     pub messages: Vec<Message>,
+    #[serde(default)]
+    pub folders: Vec<MailFolder>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

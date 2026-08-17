@@ -14,6 +14,8 @@
   <a href="./LICENSE">MIT License</a>
   ·
   <a href="./STATUS.md">Status</a>
+  ·
+  <a href="./CHANGELOG.md">Changelog</a>
 </p>
 
 You are the editor, not the intern who has to read every raw wire. Invoices and “please reply” land in **Action**. Newsletters and long FYI land in **Reading**. Staff (summaries, drafts) is optional, off until you turn it on, and bring-your-own-key — we do not sell tokens and we do not proxy inference.
@@ -22,10 +24,11 @@ This is a universal IMAP client, not a Gmail wrapper. Add any mailbox. Mail stay
 
 ## Status
 
-Early. You can add an IMAP mailbox, sync INBOX, read HTML mail as designed, and send through SMTP after a second confirm. Folders, flags, attachments, POP, OAuth, and staff are still open.
+Early (0.2.0). You can add an IMAP mailbox, sync INBOX / Sent / Drafts / Junk, read HTML mail as designed, and send through SMTP after a second confirm (a copy is APPENDed to Sent). Flags, attachments, POP, OAuth, and staff are still open.
 
 Living checklist: [`STATUS.md`](./STATUS.md).  
 Product thesis: [`Make Email Great Again.md`](./Make%20Email%20Great%20Again.md).
+Released versions: [`CHANGELOG.md`](./CHANGELOG.md).
 
 ## Stack
 
@@ -52,7 +55,7 @@ UI only, in a browser (empty mailbox, no IMAP):
 npm run dev
 ```
 
-Add a mailbox from **Settings**. IMAP login is tested immediately; the password goes in Windows Credential Manager / the OS keychain; recent INBOX mail is cached in SQLite. Compose / Reply send through that account’s SMTP after a second **Confirm send**.
+Add a mailbox from **Settings**. IMAP login is tested immediately; the password goes in Windows Credential Manager / the OS keychain; recent INBOX, Sent, Drafts, and Junk mail is cached in SQLite. Compose / Reply send through that account’s SMTP after a second **Confirm send**, then a copy is APPENDed to Sent on the server.
 
 If Sync says there is no password in the OS keychain, add the mailbox again from Settings with the same address — that writes the secret into Credential Manager. Re-adding updates the existing mailbox; it does not duplicate it.
 

@@ -5,7 +5,7 @@ use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{Message as SmtpMessage, SmtpTransport, Transport};
 use std::str::FromStr;
 
-pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<Message, String> {
+pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Message, Vec<u8>), String> {
     if !draft.confirm {
         return Err("Send is confirm-gated. Confirm the letter before it goes out.".into());
     }
@@ -77,13 +77,14 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<Mess
     let creds = Credentials::new(user.to_string(), password);
     let mailer = transport(&host, port, account.trust_tls, creds)?;
     mailer.send(&email).map_err(friendly)?;
+    let rfc822 = email.formatted();
 
     let to_line = recipients
         .iter()
         .map(|m| m.email.to_string())
         .collect::<Vec<_>>()
         .join(", ");
-    Ok(Message {
+    let message = Message {
         id: format!("sent:{}:{}", account.id, uuid::Uuid::new_v4()),
         account_id: account.id.clone(),
         feed: "reading".into(),
@@ -102,7 +103,8 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<Mess
         waiting_on: false,
         folder: "sent".into(),
         hero: None,
-    })
+    };
+    Ok((message, rfc822))
 }
 
 fn transport(

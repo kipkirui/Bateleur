@@ -1,5 +1,8 @@
-use bateleur_core::{classify_feed, html_to_plain, preview_text, Account, Hero, Message};
-use imap::types::Flag;
+use bateleur_core::{
+    classify_feed, classify_imap_folder, html_to_plain, preview_text, Account, Hero, MailFolder,
+    Message,
+};
+use imap::types::{Flag, NameAttribute};
 use mail_parser::{MessageParser, PartType};
 use rustls::pki_types::ServerName;
 use rustls::{ClientConnection, StreamOwned};
@@ -7,7 +10,71 @@ use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub fn fetch_inbox(account: &Account, password: &str) -> Result<Vec<Message>, String> {
+type TlsStream = StreamOwned<ClientConnection, TcpStream>;
+type Session = imap::Session<TlsStream>;
+
+pub struct FetchResult {
+    pub messages: Vec<Message>,
+    pub folders: Vec<MailFolder>,
+}
+
+pub fn fetch_account(account: &Account, password: &str) -> Result<FetchResult, String> {
+    let mut session = login(account, password)?;
+    let folders = list_folders(&mut session, &account.id)?;
+    let mut messages = Vec::new();
+    let mut custom_fetched = 0;
+    for folder in &folders {
+        let limit = match folder.canonical.as_str() {
+            "inbox" => 40,
+            "sent" | "drafts" | "junk" => 30,
+            "custom" => {
+                if custom_fetched >= 8 {
+                    continue;
+                }
+                custom_fetched += 1;
+                15
+            }
+            _ => continue,
+        };
+        match fetch_named(&mut session, account, folder, limit) {
+            Ok(mut batch) => messages.append(&mut batch),
+            Err(err) => {
+                if folder.canonical == "inbox" {
+                    let _ = session.logout();
+                    return Err(err);
+                }
+            }
+        }
+    }
+    let _ = session.logout();
+    Ok(FetchResult { messages, folders })
+}
+
+pub fn append_sent(
+    account: &Account,
+    password: &str,
+    rfc822: &[u8],
+) -> Result<Option<Message>, String> {
+    let mut session = login(account, password)?;
+    let folders = list_folders(&mut session, &account.id)?;
+    let sent = folders
+        .iter()
+        .find(|f| f.canonical == "sent")
+        .cloned()
+        .or_else(|| ensure_sent_mailbox(&mut session, &account.id).ok());
+    let Some(sent) = sent else {
+        let _ = session.logout();
+        return Ok(None);
+    };
+    session
+        .append_with_flags(&sent.imap_name, rfc822, &[Flag::Seen])
+        .map_err(friendly)?;
+    let fetched = fetch_named(&mut session, account, &sent, 1).ok();
+    let _ = session.logout();
+    Ok(fetched.and_then(|mut batch| batch.pop()))
+}
+
+fn login(account: &Account, password: &str) -> Result<Session, String> {
     let host = account
         .imap_host
         .as_deref()
@@ -31,14 +98,76 @@ pub fn fetch_inbox(account: &Account, password: &str) -> Result<Vec<Message>, St
     }
 
     let client = connect_tls(host, port, account.trust_tls)?;
-    let mut session = client.login(user, password).map_err(|e| friendly(e.0))?;
-    let mailbox = session.select("INBOX").map_err(friendly)?;
+    client.login(user, password).map_err(|e| friendly(e.0))
+}
+
+fn list_folders(session: &mut Session, account_id: &str) -> Result<Vec<MailFolder>, String> {
+    let listed = session
+        .list(Some(""), Some("*"))
+        .map_err(friendly)?;
+    let mut out = Vec::new();
+    let mut seen_canonical = std::collections::HashSet::new();
+    for name in listed.iter() {
+        let tokens: Vec<String> = name
+            .attributes()
+            .iter()
+            .map(attr_token)
+            .collect();
+        let refs: Vec<&str> = tokens.iter().map(String::as_str).collect();
+        let Some(class) = classify_imap_folder(name.name(), &refs) else {
+            continue;
+        };
+        if class.canonical != "custom" && !seen_canonical.insert(class.canonical) {
+            continue;
+        }
+        out.push(MailFolder {
+            account_id: account_id.to_string(),
+            canonical: class.canonical.to_string(),
+            imap_name: name.name().to_string(),
+            label: class.label,
+        });
+    }
+    if !out.iter().any(|f| f.canonical == "inbox") {
+        out.insert(
+            0,
+            MailFolder {
+                account_id: account_id.to_string(),
+                canonical: "inbox".into(),
+                imap_name: "INBOX".into(),
+                label: "Inbox".into(),
+            },
+        );
+    }
+    out.sort_by(|a, b| folder_rank(&a.canonical).cmp(&folder_rank(&b.canonical)));
+    Ok(out)
+}
+
+fn ensure_sent_mailbox(session: &mut Session, account_id: &str) -> Result<MailFolder, String> {
+    for candidate in ["Sent", "Sent Items", "INBOX.Sent"] {
+        if session.create(candidate).is_ok() || session.select(candidate).is_ok() {
+            return Ok(MailFolder {
+                account_id: account_id.to_string(),
+                canonical: "sent".into(),
+                imap_name: candidate.into(),
+                label: "Sent".into(),
+            });
+        }
+    }
+    Err("Could not find or create a Sent folder.".into())
+}
+
+fn fetch_named(
+    session: &mut Session,
+    account: &Account,
+    folder: &MailFolder,
+    limit: u32,
+) -> Result<Vec<Message>, String> {
+    let mailbox = session.select(&folder.imap_name).map_err(friendly)?;
     let exists = mailbox.exists;
     if exists == 0 {
-        let _ = session.logout();
         return Ok(Vec::new());
     }
-    let start = exists.saturating_sub(39).max(1);
+    let start = exists.saturating_sub(limit.saturating_sub(1)).max(1);
     let seq = format!("{start}:{exists}");
     let fetches = session
         .fetch(&seq, "(UID FLAGS RFC822)")
@@ -60,7 +189,7 @@ pub fn fetch_inbox(account: &Account, password: &str) -> Result<Vec<Message>, St
         let preview = preview_text(&body, 180);
         let feed = classify_feed(&subject, &preview, &from_email).to_string();
         let domain = from_email.split('@').nth(1).unwrap_or("mail");
-        let hero = if feed == "reading" {
+        let hero = if feed == "reading" && folder.canonical == "inbox" {
             Some(Hero {
                 label: domain.to_string(),
                 tone: "paper".into(),
@@ -68,8 +197,9 @@ pub fn fetch_inbox(account: &Account, password: &str) -> Result<Vec<Message>, St
         } else {
             None
         };
+        let folder_id = message_folder(&folder.canonical, &folder.imap_name);
         out.push(Message {
-            id: format!("{}:{uid}", account.id),
+            id: format!("{}:{folder_id}:{uid}", account.id),
             account_id: account.id.clone(),
             feed,
             from_name,
@@ -84,12 +214,39 @@ pub fn fetch_inbox(account: &Account, password: &str) -> Result<Vec<Message>, St
                 .unwrap_or_else(|| chrono_fallback()),
             unread,
             waiting_on: false,
-            folder: "inbox".into(),
+            folder: folder_id,
             hero,
         });
     }
-    let _ = session.logout();
     Ok(out)
+}
+
+fn message_folder(canonical: &str, imap_name: &str) -> String {
+    if canonical == "custom" {
+        format!("custom:{imap_name}")
+    } else {
+        canonical.to_string()
+    }
+}
+
+fn folder_rank(canonical: &str) -> u8 {
+    match canonical {
+        "inbox" => 0,
+        "sent" => 1,
+        "drafts" => 2,
+        "junk" => 3,
+        _ => 4,
+    }
+}
+
+fn attr_token(attr: &NameAttribute<'_>) -> String {
+    match attr {
+        NameAttribute::NoInferiors => "\\Noinferiors".into(),
+        NameAttribute::NoSelect => "\\Noselect".into(),
+        NameAttribute::Marked => "\\Marked".into(),
+        NameAttribute::Unmarked => "\\Unmarked".into(),
+        NameAttribute::Custom(value) => value.to_string(),
+    }
 }
 
 fn connect_tls(

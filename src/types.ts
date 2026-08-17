@@ -32,7 +32,15 @@ export type Message = {
 export type Mailbox = {
   accounts: Account[];
   messages: Message[];
+  folders?: MailFolder[];
   waiting: number;
+};
+
+export type MailFolder = {
+  accountId: string;
+  canonical: string;
+  imapName: string;
+  label: string;
 };
 
 export type ServerGuess = {
@@ -66,5 +74,11 @@ export type SendDraft = {
   html?: string | null;
 };
 
-export type FeedId = "action" | "reading" | "sent" | "drafts";
+export type FeedId =
+  | "action"
+  | "reading"
+  | "sent"
+  | "drafts"
+  | "junk"
+  | `custom:${string}`;
 export type ReaderMode = "magazine" | "raw";

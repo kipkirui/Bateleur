@@ -43,8 +43,25 @@ npm run tauri dev
 1. Open an issue first if the change is more than a small fix.
 2. Keep the diff focused. Do not mix refactors with features.
 3. Update `STATUS.md` when you ship or cut a surface.
-4. Do not commit `node_modules`, `src-tauri/target`, `.env`, or mail databases.
-5. Do not add sample / fixture mailboxes or fake “waiting-on” copy.
+4. Bump the version and add a `CHANGELOG.md` entry (see Versioning below).
+5. Do not commit `node_modules`, `src-tauri/target`, `.env`, or mail databases.
+6. Do not add sample / fixture mailboxes or fake “waiting-on” copy.
+
+## Versioning
+
+Bateleur is pre-1.0. Use SemVer:
+
+- **MINOR** — a user-visible mail surface (folders, flags, attachments, …)
+- **PATCH** — a fix that does not change the surface
+
+When you cut a version, update all four together:
+
+- `package.json`
+- `src-tauri/tauri.conf.json`
+- `src-tauri/Cargo.toml`
+- `crates/bateleur-core/Cargo.toml`
+
+Then add a section to [`CHANGELOG.md`](./CHANGELOG.md) and tag `vX.Y.Z` on `main`.
 
 ## Code of conduct
 

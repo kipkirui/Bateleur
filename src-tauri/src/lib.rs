@@ -74,7 +74,7 @@ async fn add_account(state: State<'_, AppState>, draft: AccountDraft) -> Result<
 
     let password = draft.password.clone();
     let to_fetch = account.clone();
-    let fetched = tauri::async_runtime::spawn_blocking(move || imap::fetch_inbox(&to_fetch, &password))
+    let fetched = tauri::async_runtime::spawn_blocking(move || imap::fetch_account(&to_fetch, &password))
         .await
         .map_err(|e| e.to_string())??;
 
@@ -84,8 +84,17 @@ async fn add_account(state: State<'_, AppState>, draft: AccountDraft) -> Result<
     let mailbox = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::upsert_account(&conn, &account)?;
-        for message in fetched {
+        db::replace_folders(&conn, &account.id, &fetched.folders)?;
+        for message in fetched.messages {
             db::upsert_message(&conn, &message)?;
+        }
+        db::prune_stale_inbox(&conn, &account.id)?;
+        if fetched
+            .messages
+            .iter()
+            .any(|m| m.folder == "sent" && m.id.contains(":sent:"))
+        {
+            db::prune_local_sent(&conn, &account.id)?;
         }
         db::load_mailbox(&conn)?
     };
@@ -103,14 +112,23 @@ async fn sync_account(state: State<'_, AppState>, account_id: String) -> Result<
     }
     let password = secrets::load_password(&account.address)?;
     let to_fetch = account.clone();
-    let fetched = tauri::async_runtime::spawn_blocking(move || imap::fetch_inbox(&to_fetch, &password))
+    let fetched = tauri::async_runtime::spawn_blocking(move || imap::fetch_account(&to_fetch, &password))
         .await
         .map_err(|e| e.to_string())??;
 
     let mailbox = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
-        for message in fetched {
+        db::replace_folders(&conn, &account.id, &fetched.folders)?;
+        for message in fetched.messages {
             db::upsert_message(&conn, &message)?;
+        }
+        db::prune_stale_inbox(&conn, &account.id)?;
+        if fetched
+            .messages
+            .iter()
+            .any(|m| m.folder == "sent" && m.id.contains(":sent:"))
+        {
+            db::prune_local_sent(&conn, &account.id)?;
         }
         db::load_mailbox(&conn)?
     };
@@ -132,9 +150,21 @@ async fn send_mail(state: State<'_, AppState>, draft: SendDraft) -> Result<Mailb
     let password = secrets::load_password(&account.address)?;
     let to_send = account.clone();
     let payload = draft.clone();
-    let sent = tauri::async_runtime::spawn_blocking(move || smtp::send(&to_send, &password, &payload))
-        .await
-        .map_err(|e| e.to_string())??;
+    let (mut sent, rfc822) =
+        tauri::async_runtime::spawn_blocking(move || smtp::send(&to_send, &password, &payload))
+            .await
+            .map_err(|e| e.to_string())??;
+
+    let password = secrets::load_password(&account.address)?;
+    let to_append = account.clone();
+    if let Ok(Some(from_imap)) = tauri::async_runtime::spawn_blocking(move || {
+        imap::append_sent(&to_append, &password, &rfc822)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    {
+        sent = from_imap;
+    }
 
     let mailbox = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;

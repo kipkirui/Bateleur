@@ -145,7 +145,7 @@ Sync stays dumb: fetch → parse → cache → render. Staff runs only for capab
 ## Build order
 
 1. **Staff-off homepage first.** Shipped. No fixture mailbox. The three-zone shell (compose, accounts, Action / Reading, Magazine | Raw, Co-Pilot collapsed) reads live IMAP mail from SQLite.
-2. **Add Account + one real IMAP round-trip.** Autoconfig, then manual settings. Password in the OS keychain (not a mock store). Fetch → parse → cache → render works on any IMAP host, including HTML newsletters opened as designed and readable subjects/previews (entities and tags stripped in summaries). Confirm-gated SMTP send is in. POP ingest is next, then IMAP folders / APPEND for Sent.
+2. **Add Account + one real IMAP round-trip.** Autoconfig, then manual settings. Password in the OS keychain (not a mock store). Fetch → parse → cache → render works on any IMAP host, including HTML newsletters opened as designed and readable subjects/previews (entities and tags stripped in summaries). Confirm-gated SMTP send APPENDs to Sent. POP ingest is next, then IMAP flags.
 3. **Staff last, behind a switch.** Mail works with zero AI. Then: BYOK settings (provider + key + model), then one capability (summarize this message), then drafts that open in the reader before send. Then Stories and Brief. Same staff interface regardless of mailbox or LLM vendor. Batch-on-sync is an opt-in, not the default. Co-Pilot stays a drawer until there is a next action.
 
 No Gmail API. No Microsoft Graph. No bundled inference, no our-cloud proxy. If a host only speaks a proprietary mail API and not IMAP/POP, it is out of scope. The product is Outlook-shaped: add any email, read it as a magazine, hire staff if you want.

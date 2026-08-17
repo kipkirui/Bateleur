@@ -66,7 +66,10 @@ export default function App() {
     const q = query.trim().toLowerCase();
     return messages.filter((m) => {
       if (accountId && m.accountId !== accountId) return false;
-      if (feed === "sent" || feed === "drafts") return m.folder === feed;
+      if (feed === "sent" || feed === "drafts" || feed === "junk") {
+        return m.folder === feed;
+      }
+      if (feed.startsWith("custom:")) return m.folder === feed;
       if (m.folder !== "inbox") return false;
       if (m.feed !== feed) return false;
       if (!q || q.startsWith("/")) return true;
@@ -242,12 +245,16 @@ export default function App() {
     accounts.length === 0
       ? "Add a mailbox in Settings to fetch mail."
       : feed === "sent"
-        ? "Sent is empty. Letters you confirm-send land here."
+        ? "Sent is empty. Letters you confirm-send are copied here on the server."
         : feed === "drafts"
-          ? "No drafts yet."
-          : query.startsWith("/")
-            ? "Staff is off. Commands need a key — Hire staff."
-            : "Nothing in this feed.";
+          ? "No drafts on the server yet."
+          : feed === "junk"
+            ? "Junk is empty."
+            : feed.startsWith("custom:")
+              ? "Nothing in this folder."
+              : query.startsWith("/")
+                ? "Staff is off. Commands need a key — Hire staff."
+                : "Nothing in this feed.";
 
   return (
     <div className={deskOpen ? "shell desk-open" : "shell"}>
@@ -258,6 +265,7 @@ export default function App() {
         feed={feed}
         onFeed={setFeed}
         waiting={waitingFor(messages, accountId)}
+        folders={mailbox?.folders ?? []}
         mode={mode}
         onMode={setMode}
         onCompose={() => openCompose()}

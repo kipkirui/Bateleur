@@ -1,4 +1,4 @@
-use bateleur_core::{Account, Hero, Mailbox, Message};
+use bateleur_core::{Account, Hero, MailFolder, Mailbox, Message};
 use rusqlite::{params, Connection};
 
 pub fn open(path: &std::path::Path) -> Result<Connection, String> {
@@ -32,6 +32,13 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
             folder TEXT NOT NULL,
             hero_label TEXT,
             hero_tone TEXT
+        );
+        CREATE TABLE IF NOT EXISTS folders (
+            account_id TEXT NOT NULL,
+            canonical TEXT NOT NULL,
+            imap_name TEXT NOT NULL,
+            label TEXT NOT NULL,
+            PRIMARY KEY (account_id, imap_name)
         );
         ",
     )
@@ -75,7 +82,25 @@ pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
         messages.push(row.map_err(err)?);
     }
 
-    Ok(Mailbox { accounts, messages })
+    let mut folders = Vec::new();
+    let mut stmt = conn
+        .prepare(
+            "SELECT account_id, canonical, imap_name, label
+             FROM folders ORDER BY canonical, label",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([], |row| folder_from_row(row))
+        .map_err(err)?;
+    for row in rows {
+        folders.push(row.map_err(err)?);
+    }
+
+    Ok(Mailbox {
+        accounts,
+        messages,
+        folders,
+    })
 }
 
 pub fn upsert_account(conn: &Connection, account: &Account) -> Result<(), String> {
@@ -129,9 +154,54 @@ pub fn upsert_message(conn: &Connection, message: &Message) -> Result<(), String
     Ok(())
 }
 
+pub fn replace_folders(
+    conn: &Connection,
+    account_id: &str,
+    folders: &[MailFolder],
+) -> Result<(), String> {
+    conn.execute("DELETE FROM folders WHERE account_id = ?1", [account_id])
+        .map_err(err)?;
+    for folder in folders {
+        conn.execute(
+            "INSERT INTO folders (account_id, canonical, imap_name, label)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                folder.account_id,
+                folder.canonical,
+                folder.imap_name,
+                folder.label
+            ],
+        )
+        .map_err(err)?;
+    }
+    Ok(())
+}
+
+pub fn prune_stale_inbox(conn: &Connection, account_id: &str) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM messages
+         WHERE account_id = ?1 AND folder = 'inbox' AND id NOT LIKE ?2",
+        params![account_id, format!("{account_id}:inbox:%")],
+    )
+    .map_err(err)?;
+    Ok(())
+}
+
+pub fn prune_local_sent(conn: &Connection, account_id: &str) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM messages
+         WHERE account_id = ?1 AND folder = 'sent' AND id LIKE ?2",
+        params![account_id, format!("sent:{account_id}:%")],
+    )
+    .map_err(err)?;
+    Ok(())
+}
+
 pub fn remove_account(conn: &Connection, id: &str) -> Result<Account, String> {
     let account = get_account(conn, id)?;
     conn.execute("DELETE FROM messages WHERE account_id = ?1", [id])
+        .map_err(err)?;
+    conn.execute("DELETE FROM folders WHERE account_id = ?1", [id])
         .map_err(err)?;
     conn.execute("DELETE FROM accounts WHERE id = ?1", [id])
         .map_err(err)?;
@@ -162,6 +232,15 @@ pub fn get_account_by_address(conn: &Connection, address: &str) -> Result<Option
         Some(row) => Ok(Some(account_from_row(row).map_err(err)?)),
         None => Ok(None),
     }
+}
+
+fn folder_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MailFolder> {
+    Ok(MailFolder {
+        account_id: row.get(0)?,
+        canonical: row.get(1)?,
+        imap_name: row.get(2)?,
+        label: row.get(3)?,
+    })
 }
 
 fn message_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {

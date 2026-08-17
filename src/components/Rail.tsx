@@ -1,6 +1,6 @@
 import wordmarkDay from "../assets/logo/vector/isolated-monochrome-black.svg";
 import wordmarkNight from "../assets/logo/vector/isolated-monochrome-white.svg";
-import type { Account, FeedId, ReaderMode } from "../types";
+import type { Account, FeedId, MailFolder, ReaderMode } from "../types";
 import { Mark } from "./Mark";
 
 type Props = {
@@ -10,6 +10,7 @@ type Props = {
   feed: FeedId;
   onFeed: (feed: FeedId) => void;
   waiting: number;
+  folders: MailFolder[];
   mode: ReaderMode;
   onMode: (mode: ReaderMode) => void;
   onCompose: () => void;
@@ -21,8 +22,12 @@ type Props = {
 const FEEDS: { id: FeedId; label: string }[] = [
   { id: "action", label: "Action" },
   { id: "reading", label: "Reading" },
+];
+
+const SYSTEM_FOLDERS: { id: FeedId; label: string }[] = [
   { id: "sent", label: "Sent" },
   { id: "drafts", label: "Drafts" },
+  { id: "junk", label: "Junk" },
 ];
 
 export function Rail({
@@ -32,6 +37,7 @@ export function Rail({
   feed,
   onFeed,
   waiting,
+  folders,
   mode,
   onMode,
   onCompose,
@@ -90,6 +96,38 @@ export function Rail({
           {item.label}
         </button>
       ))}
+
+      <div className="rail-label">Folders</div>
+      {SYSTEM_FOLDERS.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={feed === item.id ? "nav active" : "nav"}
+          onClick={() => onFeed(item.id)}
+        >
+          {item.label}
+        </button>
+      ))}
+      {folders
+        .filter(
+          (folder) =>
+            folder.canonical === "custom" &&
+            (!accountId || folder.accountId === accountId),
+        )
+        .map((folder) => {
+          const id = `custom:${folder.imapName}` as FeedId;
+          return (
+            <button
+              key={`${folder.accountId}:${folder.imapName}`}
+              type="button"
+              className={feed === id ? "nav active" : "nav"}
+              onClick={() => onFeed(id)}
+            >
+              <span>{folder.label}</span>
+              <span className="nav-meta">{folder.imapName}</span>
+            </button>
+          );
+        })}
 
       <div className="rail-spacer" />
 
