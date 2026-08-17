@@ -1,0 +1,24 @@
+name: Feature
+description: A product change that fits the thesis
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check [STATUS.md](../../STATUS.md) first. If it is already listed as
+        pending, comment there instead of opening a duplicate.
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What this unblocks for a mail client that still works with staff off.
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What
+      description: The smallest change that would be enough.
+    validations:
+      required: true

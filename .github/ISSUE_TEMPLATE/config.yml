@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Maintainer on X
+    url: https://x.com/twkip
+    about: Kipkirui (@twkip)
+  - name: Security reports
+    url: https://x.com/twkip
+    about: Credential, XSS, or mail-leak issues — see SECURITY.md, do not file publicly.
