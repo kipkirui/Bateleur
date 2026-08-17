@@ -624,6 +624,19 @@ kbd {
   margin: 0 0 16px;
 }
 
+.remote-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: center;
+  margin: 0 0 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
 .composer {
   display: flex;
   flex-direction: column;

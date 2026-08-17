@@ -11,6 +11,7 @@ import { Settings } from "./components/Settings";
 import { StaffModal } from "./components/StaffModal";
 import type { AccountDraft, DraftAttachment, FeedId, Mailbox, Message, ReaderMode } from "./types";
 import type { MailTo } from "./lib/links";
+import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
 import "./styles.css";
 
 type Overlay = "none" | "reader" | "compose" | "settings" | "staff";
@@ -33,6 +34,7 @@ export default function App() {
   const [overlay, setOverlay] = useState<Overlay>("none");
   const [deskOpen, setDeskOpen] = useState(false);
   const [theme, setTheme] = useState<"day" | "night">("day");
+  const [remoteImages, setRemoteImages] = useState(loadRemoteImagesPref);
   const [composeTo, setComposeTo] = useState("");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
@@ -360,6 +362,11 @@ export default function App() {
           onFlag={() => void onSetFlag(selected, { flagged: !selected.flagged })}
           onArchive={() => void onArchive(selected)}
           onMailTo={openMailTo}
+          remoteImages={remoteImages}
+          onRemoteImages={(on) => {
+            setRemoteImages(on);
+            saveRemoteImagesPref(on);
+          }}
         />
       ) : null}
 
@@ -397,6 +404,11 @@ export default function App() {
           onSync={onSync}
           onRemove={onRemoveAccount}
           removing={accountBusy}
+          remoteImages={remoteImages}
+          onRemoteImages={(on) => {
+            setRemoteImages(on);
+            saveRemoteImagesPref(on);
+          }}
         />
       ) : null}
 

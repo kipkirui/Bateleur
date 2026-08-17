@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { loadInlineParts, saveAttachment } from "../api";
-import { readableText } from "../lib/emailHtml";
+import { hasRemoteImages, readableText, rewriteCidImages } from "../lib/emailHtml";
 import { Letter, letterHtml } from "./Letter";
 import type { MailTo } from "../lib/links";
 import type { Account, Attachment, InlinePart, Message } from "../types";
@@ -14,6 +14,8 @@ type Props = {
   onFlag: () => void;
   onArchive: () => void;
   onMailTo: (mail: MailTo) => void;
+  remoteImages: boolean;
+  onRemoteImages: (on: boolean) => void;
 };
 
 export function Reader({
@@ -25,10 +27,13 @@ export function Reader({
   onFlag,
   onArchive,
   onMailTo,
+  remoteImages,
+  onRemoteImages,
 }: Props) {
   const html = letterHtml(message);
   const files = (message.attachments ?? []).filter((a) => !a.inline);
   const [cidParts, setCidParts] = useState<InlinePart[]>([]);
+  const [thisLetter, setThisLetter] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
 
@@ -52,6 +57,16 @@ export function Reader({
       cancelled = true;
     };
   }, [message.id, message.attachments]);
+
+  useEffect(() => {
+    setThisLetter(false);
+  }, [message.id]);
+
+  const allowRemote = remoteImages || thisLetter;
+  const showRemoteBar =
+    !allowRemote &&
+    Boolean(html) &&
+    hasRemoteImages(rewriteCidImages(html ?? "", cidParts));
 
   async function onSave(file: Attachment) {
     setSavingId(file.id);
@@ -82,7 +97,23 @@ export function Reader({
           {readableText(message.fromName)} &lt;{message.fromEmail}&gt;
           {message.flagged ? <span className="flag-mark" title="Flagged" /> : null}
         </div>
-        <Letter message={message} onMailTo={onMailTo} cidParts={cidParts} />
+        <Letter
+          message={message}
+          onMailTo={onMailTo}
+          cidParts={cidParts}
+          remoteImages={allowRemote}
+        />
+        {showRemoteBar ? (
+          <div className="remote-bar">
+            <span>Remote images are blocked.</span>
+            <button type="button" className="text-btn" onClick={() => setThisLetter(true)}>
+              Load for this letter
+            </button>
+            <button type="button" className="text-btn" onClick={() => onRemoteImages(true)}>
+              Always load
+            </button>
+          </div>
+        ) : null}
         {files.length > 0 ? (
           <div className="attach-list">
             <div className="rail-label">Files</div>

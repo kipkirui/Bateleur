@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.5.0] - 2026-08-17
+
+### Added
+
+- Remote images are blocked by default. Load for this letter, or always load from Settings
+
 ## [0.4.0] - 2026-08-17
 
 ### Added

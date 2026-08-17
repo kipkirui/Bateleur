@@ -24,7 +24,7 @@ This is a universal IMAP client, not a Gmail wrapper. Add any mailbox. Mail stay
 
 ## Status
 
-Early (0.4.0). You can add an IMAP mailbox, sync INBOX / Sent / Drafts / Junk, read HTML mail as designed, send through SMTP after a second confirm (a copy is APPENDed to Sent), archive / unread / flag on the server, and open or attach files. POP, OAuth, and staff are still open.
+Early (0.5.0). You can add an IMAP mailbox, sync INBOX / Sent / Drafts / Junk, read HTML mail as designed, send through SMTP after a second confirm (a copy is APPENDed to Sent), archive / unread / flag on the server, and open or attach files. Remote images stay off until you load them. POP, OAuth, and staff are still open.
 
 Living checklist: [`STATUS.md`](./STATUS.md).  
 Product thesis: [`Make Email Great Again.md`](./Make%20Email%20Great%20Again.md).

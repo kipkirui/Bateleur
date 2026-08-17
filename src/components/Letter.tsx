@@ -21,6 +21,7 @@ type Props = {
   message: Message;
   onMailTo: (mail: MailTo) => void;
   cidParts?: InlinePart[];
+  remoteImages?: boolean;
 };
 
 export function letterHtml(message: Message): string | null {
@@ -31,7 +32,7 @@ export function letterHtml(message: Message): string | null {
   return null;
 }
 
-export function Letter({ message, onMailTo, cidParts = [] }: Props) {
+export function Letter({ message, onMailTo, cidParts = [], remoteImages = false }: Props) {
   const html = letterHtml(message);
   const src = html ? rewriteCidImages(html, cidParts) : null;
   const [mode, setMode] = useState<"html" | "text">(src ? "html" : "text");
@@ -51,7 +52,12 @@ export function Letter({ message, onMailTo, cidParts = [] }: Props) {
       ) : null}
       {src && mode === "html" ? (
         <>
-          <HtmlLetter key={message.id} html={src} onMailTo={onMailTo} />
+          <HtmlLetter
+            key={`${message.id}-${remoteImages ? "remote" : "local"}`}
+            html={src}
+            remoteImages={remoteImages}
+            onMailTo={onMailTo}
+          />
           <div className="letter-switch">
             <button type="button" className="text-btn" onClick={() => setMode("text")}>
               Show plain text
@@ -69,9 +75,17 @@ export function Letter({ message, onMailTo, cidParts = [] }: Props) {
   );
 }
 
-function HtmlLetter({ html, onMailTo }: { html: string; onMailTo: (mail: MailTo) => void }) {
+function HtmlLetter({
+  html,
+  remoteImages,
+  onMailTo,
+}: {
+  html: string;
+  remoteImages: boolean;
+  onMailTo: (mail: MailTo) => void;
+}) {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const srcdoc = sanitizeEmailHtml(html);
+  const srcdoc = sanitizeEmailHtml(html, remoteImages);
 
   useEffect(() => {
     const node = frameRef.current;

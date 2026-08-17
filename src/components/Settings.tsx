@@ -13,6 +13,8 @@ type Props = {
   onSync: (accountId: string) => void;
   onRemove: (accountId: string) => void;
   removing?: boolean;
+  remoteImages: boolean;
+  onRemoteImages: (on: boolean) => void;
 };
 
 export function Settings({
@@ -24,6 +26,8 @@ export function Settings({
   onSync,
   onRemove,
   removing = false,
+  remoteImages,
+  onRemoteImages,
 }: Props) {
   const [address, setAddress] = useState("");
   const [password, setPassword] = useState("");
@@ -78,6 +82,14 @@ export function Settings({
             the OS keychain, never in SQLite. Gmail and Outlook need an app
             password.
           </p>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={remoteImages}
+              onChange={(e) => onRemoteImages(e.target.checked)}
+            />
+            Load remote images in letters
+          </label>
 
           <div className="account-list">
             {accounts.length === 0 ? (

@@ -12,7 +12,7 @@ Living checklist against the product in [`Make Email Great Again.md`](./Make%20E
 
 **Send.** Confirm-gated SMTP via `lettre` (STARTTLS on 587, implicit TLS on 465). Compose / Reply / mailto: pick a From mailbox, then **Send** then **Confirm send**. The same OS-keychain password is used. After SMTP succeeds we IMAP APPEND the RFC822 to the account’s Sent folder (`\Seen`). If APPEND fails, a local Sent copy is still stored. Gmail/Outlook still need an app password. Empty body or a missing To address is refused.
 
-**Reader.** The HTML MIME part is what we open, not the text conversion. Newsletters (Facebook, Gmail, etc.) keep `<style>` as CSS — including `:root` color-scheme, `@font-face`, and Gmail’s `u + .body` hacks — instead of dumping those rules as the letter. Scripts, forms, and `javascript:` URLs are stripped; tables, images, and author CSS stay. The iframe does not force Bateleur serif/charcoal onto the letter. Remote https images load; `cid:` inline images rewrite from cached MIME parts. http(s) links open in the system browser. `mailto:` opens Compose in Bateleur. Plain text autolinks URLs and addresses. Toggle to plain text when HTML is present. Gmail App-password hint in Settings. Opening a letter STOREs `\Seen`. Reader footer: Unread, Flag, Archive, Reply. Files list with Save to Downloads.
+**Reader.** The HTML MIME part is what we open, not the text conversion. Newsletters (Facebook, Gmail, etc.) keep `<style>` as CSS — including `:root` color-scheme, `@font-face`, and Gmail’s `u + .body` hacks — instead of dumping those rules as the letter. Scripts, forms, and `javascript:` URLs are stripped; tables, images, and author CSS stay. The iframe does not force Bateleur serif/charcoal onto the letter. Remote http(s) images are blocked until you load them (this letter, or always in Settings). `cid:` inline images rewrite from cached MIME parts. http(s) links open in the system browser. `mailto:` opens Compose in Bateleur. Plain text autolinks URLs and addresses. Toggle to plain text when HTML is present. Gmail App-password hint in Settings. Opening a letter STOREs `\Seen`. Reader footer: Unread, Flag, Archive, Reply. Files list with Save to Downloads.
 
 **Flags.** Unread (`\Seen`), flag (`\Flagged`), and archive. Archive uses IMAP MOVE when the server allows it, otherwise COPY + `\Deleted` + EXPUNGE. Destination is `\Archive`, a folder named Archive, or Gmail `[Gmail]/All Mail` (`\All`). That folder is listed and stored so archive has somewhere to go; it is not fetched into the feed. Local-only Sent copies (`sent:…`) cannot STORE — sync first. IMAP succeeds, then SQLite.
 
@@ -27,7 +27,6 @@ Living checklist against the product in [`Make Email Great Again.md`](./Make%20E
 These are required before Bateleur is an Outlook-shaped client, not a reader.
 
 - POP ingest on the same SQLite schema
-- Optional “load remote images” switch (newsletters currently load https images)
 - IDLE / background sync, sync status in the chrome
 - OAuth / XOAUTH2 for hosts that refuse app passwords
 - Second-account proof is already possible; keep unified vs per-account as the user’s choice

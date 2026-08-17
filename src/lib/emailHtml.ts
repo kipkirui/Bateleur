@@ -147,7 +147,15 @@ export function rewriteCidImages(
   });
 }
 
-export function sanitizeEmailHtml(html: string): string {
+export function hasRemoteImages(html: string): boolean {
+  if (!html) return false;
+  return /(?:src|background|poster|srcset)\s*=\s*["'][^"']*https?:\/\//i.test(html)
+    || /(?:src|background|poster|srcset)\s*=\s*["']\s*\/\//i.test(html)
+    || /url\s*\(\s*['"]?https?:\/\//i.test(html)
+    || /url\s*\(\s*['"]?\/\//i.test(html);
+}
+
+export function sanitizeEmailHtml(html: string, remoteImages = false): string {
   const recovered = wrapLeadingCss(html);
   const doc = new DOMParser().parseFromString(recovered, "text/html");
   for (const el of [...doc.querySelectorAll("*")]) {
@@ -188,24 +196,32 @@ export function sanitizeEmailHtml(html: string): string {
           lower.startsWith("#") ||
           lower.startsWith("cid:");
         if (!ok) el.removeAttribute(attr.name);
+        continue;
       }
-      if (
-        (name === "src" || name === "background" || name === "poster") &&
-        !/^https?:\/\//i.test(value) &&
-        !lower.startsWith("data:image/") &&
-        !lower.startsWith("cid:")
-      ) {
-        el.removeAttribute(attr.name);
+      if (name === "src" || name === "background" || name === "poster") {
+        const remote = /^https?:\/\//i.test(value) || lower.startsWith("//");
+        const local =
+          lower.startsWith("data:image/") || lower.startsWith("cid:");
+        if (remote && !remoteImages) {
+          el.removeAttribute(attr.name);
+        } else if (!remote && !local) {
+          el.removeAttribute(attr.name);
+        }
+        continue;
+      }
+      if (name === "srcset") {
+        if (!remoteImages) el.removeAttribute(attr.name);
+        continue;
       }
     }
     if (el.hasAttribute("style")) {
-      el.setAttribute("style", scrubCss(el.getAttribute("style") ?? ""));
+      el.setAttribute("style", scrubCss(el.getAttribute("style") ?? "", remoteImages));
     }
   }
   hoistCssTextNodes(doc);
   const cssParts: string[] = [];
   for (const style of [...doc.querySelectorAll("style")]) {
-    cssParts.push(scrubCss(style.textContent ?? ""));
+    cssParts.push(scrubCss(style.textContent ?? "", remoteImages));
     style.remove();
   }
   return wrapEmailDocument(cssParts, doc.body?.innerHTML ?? "");
@@ -261,12 +277,16 @@ function wrapEmailDocument(cssParts: string[], body: string): string {
 </html>`;
 }
 
-function scrubCss(css: string): string {
-  return css
+function scrubCss(css: string, remoteImages = false): string {
+  let out = css
     .replace(/expression\s*\([^)]*\)/gi, "none")
     .replace(/@import[^;]+;?/gi, "")
     .replace(/javascript\s*:/gi, "")
     .replace(/-moz-binding\s*:[^;]+;?/gi, "")
     .replace(/behavior\s*:[^;]+;?/gi, "")
     .replace(/<\/style/gi, "");
+  if (!remoteImages) {
+    out = out.replace(/url\s*\(\s*(['"]?)(?:https?:)?\/\/[^)]+\1\s*\)/gi, "none");
+  }
+  return out;
 }
