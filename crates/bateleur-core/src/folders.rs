@@ -1,7 +1,7 @@
 /// How an IMAP mailbox maps onto Bateleur's folder rail.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassifiedFolder {
-    /// `inbox`, `sent`, `drafts`, `junk`, or `custom`.
+    /// `inbox`, `sent`, `drafts`, `junk`, `archive`, or `custom`.
     pub canonical: &'static str,
     pub label: String,
 }
@@ -21,12 +21,9 @@ pub fn classify_imap_folder(name: &str, attributes: &[&str]) -> Option<Classifie
     if attrs.iter().any(|a| a == "\\noselect" || a == "noselect") {
         return None;
     }
-    if attrs.iter().any(|a| skip_special(a)) {
-        return None;
-    }
 
     let lower = trimmed.to_ascii_lowercase();
-    if skip_name(&lower) {
+    if skip_name(&lower) || attrs.iter().any(|a| skip_special(a)) {
         return None;
     }
 
@@ -43,19 +40,15 @@ pub fn classify_imap_folder(name: &str, attributes: &[&str]) -> Option<Classifie
 }
 
 fn skip_special(attr: &str) -> bool {
-    attr.contains("\\all")
-        || attr.contains("\\flagged")
-        || attr.contains("\\important")
-        || attr.contains("\\trash")
+    attr.contains("\\flagged") || attr.contains("\\important") || attr.contains("\\trash")
 }
 
 fn skip_name(lower: &str) -> bool {
     let leaf = leaf_name(lower);
     matches!(
         leaf,
-        "all mail" | "all" | "important" | "starred" | "flagged" | "trash" | "deleted items" | "bin"
-    ) || lower.contains("[gmail]/all mail")
-        || lower.contains("[gmail]/important")
+        "important" | "starred" | "flagged" | "trash" | "deleted items" | "bin"
+    ) || lower.contains("[gmail]/important")
         || lower.contains("[gmail]/starred")
         || lower.contains("[gmail]/trash")
 }
@@ -72,6 +65,9 @@ fn special_from_attr(attr: &str) -> Option<&'static str> {
     }
     if attr.contains("\\junk") || attr.contains("\\spam") {
         return Some("junk");
+    }
+    if attr.contains("\\archive") || attr.contains("\\all") {
+        return Some("archive");
     }
     if attr.contains("\\trash") || attr.contains("\\deleted") {
         return Some("trash");
@@ -103,6 +99,9 @@ fn special_from_name(lower: &str) -> Option<&'static str> {
         || leaf == "bulk mail"
     {
         return Some("junk");
+    }
+    if leaf == "archive" || leaf == "all mail" || leaf == "all" {
+        return Some("archive");
     }
     if leaf == "trash" || leaf == "deleted items" || leaf == "bin" {
         return Some("trash");
@@ -142,7 +141,14 @@ mod tests {
         assert_eq!(drafts.canonical, "drafts");
         let junk = classify_imap_folder("[Gmail]/Spam", &["\\Junk"]).unwrap();
         assert_eq!(junk.canonical, "junk");
-        assert!(classify_imap_folder("[Gmail]/All Mail", &["\\All"]).is_none());
+        let archive = classify_imap_folder("[Gmail]/All Mail", &["\\All"]).unwrap();
+        assert_eq!(archive.canonical, "archive");
+        assert_eq!(
+            classify_imap_folder("Archive", &["\\Archive"])
+                .unwrap()
+                .canonical,
+            "archive"
+        );
         assert!(classify_imap_folder("[Gmail]/Trash", &["\\Trash"]).is_none());
         assert!(classify_imap_folder("[Gmail]/Starred", &["\\Flagged"]).is_none());
     }

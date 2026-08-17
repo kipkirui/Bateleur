@@ -25,6 +25,7 @@ export type Message = {
   receivedAt: string;
   unread: boolean;
   waitingOn: boolean;
+  flagged?: boolean;
   folder: string;
   hero: Hero | null;
 };
@@ -72,6 +73,13 @@ export type SendDraft = {
   body: string;
   confirm: boolean;
   html?: string | null;
+};
+
+export type FlagChange = {
+  accountId: string;
+  messageId: string;
+  seen?: boolean | null;
+  flagged?: boolean | null;
 };
 
 export type FeedId =

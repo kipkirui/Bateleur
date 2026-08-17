@@ -48,6 +48,10 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
         [],
     );
     let _ = conn.execute("ALTER TABLE messages ADD COLUMN html_body TEXT", []);
+    let _ = conn.execute(
+        "ALTER TABLE messages ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0",
+        [],
+    );
     Ok(conn)
 }
 
@@ -71,7 +75,8 @@ pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
     let mut stmt = conn
         .prepare(
             "SELECT id, account_id, feed, from_name, from_email, subject, preview, body,
-                    received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body
+                    received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body,
+                    flagged
              FROM messages ORDER BY received_at DESC",
         )
         .map_err(err)?;
@@ -130,8 +135,8 @@ pub fn upsert_message(conn: &Connection, message: &Message) -> Result<(), String
     conn.execute(
         "INSERT OR REPLACE INTO messages
          (id, account_id, feed, from_name, from_email, subject, preview, body,
-          received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+          received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body, flagged)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         params![
             message.id,
             message.account_id,
@@ -148,6 +153,7 @@ pub fn upsert_message(conn: &Connection, message: &Message) -> Result<(), String
             message.hero.as_ref().map(|h| h.label.as_str()),
             message.hero.as_ref().map(|h| h.tone.as_str()),
             message.html_body,
+            message.flagged as i64,
         ],
     )
     .map_err(err)?;
@@ -208,6 +214,68 @@ pub fn remove_account(conn: &Connection, id: &str) -> Result<Account, String> {
     Ok(account)
 }
 
+pub fn imap_name_for_folder(
+    conn: &Connection,
+    account_id: &str,
+    folder_key: &str,
+) -> Result<String, String> {
+    if let Some(name) = folder_key.strip_prefix("custom:") {
+        if name.is_empty() {
+            return Err("Malformed custom folder.".into());
+        }
+        return Ok(name.to_string());
+    }
+    match conn.query_row(
+        "SELECT imap_name FROM folders WHERE account_id = ?1 AND canonical = ?2 LIMIT 1",
+        params![account_id, folder_key],
+        |row| row.get(0),
+    ) {
+        Ok(name) => Ok(name),
+        Err(_) if folder_key == "inbox" => Ok("INBOX".into()),
+        Err(_) => Err("Unknown folder. Sync the mailbox and try again.".into()),
+    }
+}
+
+pub fn archive_imap_name(conn: &Connection, account_id: &str) -> Result<String, String> {
+    conn.query_row(
+        "SELECT imap_name FROM folders WHERE account_id = ?1 AND canonical = 'archive' LIMIT 1",
+        [account_id],
+        |row| row.get(0),
+    )
+    .map_err(|_| {
+        "This mailbox has no Archive folder. Sync first (Gmail uses All Mail).".into()
+    })
+}
+
+pub fn apply_flag_change(
+    conn: &Connection,
+    message_id: &str,
+    seen: Option<bool>,
+    flagged: Option<bool>,
+) -> Result<(), String> {
+    if let Some(seen) = seen {
+        conn.execute(
+            "UPDATE messages SET unread = ?1 WHERE id = ?2",
+            params![i64::from(!seen), message_id],
+        )
+        .map_err(err)?;
+    }
+    if let Some(flagged) = flagged {
+        conn.execute(
+            "UPDATE messages SET flagged = ?1 WHERE id = ?2",
+            params![flagged as i64, message_id],
+        )
+        .map_err(err)?;
+    }
+    Ok(())
+}
+
+pub fn delete_message(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute("DELETE FROM messages WHERE id = ?1", [id])
+        .map_err(err)?;
+    Ok(())
+}
+
 pub fn get_account(conn: &Connection, id: &str) -> Result<Account, String> {
     conn.query_row(
         "SELECT id, address, label, kind, imap_host, imap_port, imap_user,
@@ -258,6 +326,7 @@ fn message_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
         received_at: row.get(8)?,
         unread: row.get::<_, i64>(9)? != 0,
         waiting_on: row.get::<_, i64>(10)? != 0,
+        flagged: row.get::<_, i64>(15).unwrap_or(0) != 0,
         folder: row.get(11)?,
         hero: match (label, tone) {
             (Some(label), Some(tone)) => Some(Hero { label, tone }),

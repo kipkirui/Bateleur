@@ -34,6 +34,7 @@ pub fn fetch_account(account: &Account, password: &str) -> Result<FetchResult, S
                 custom_fetched += 1;
                 15
             }
+            "archive" => continue,
             _ => continue,
         };
         match fetch_named(&mut session, account, folder, limit) {
@@ -74,6 +75,73 @@ pub fn append_sent(
     Ok(fetched.and_then(|mut batch| batch.pop()))
 }
 
+pub fn set_flags(
+    account: &Account,
+    password: &str,
+    imap_mailbox: &str,
+    uid: u32,
+    seen: Option<bool>,
+    flagged: Option<bool>,
+) -> Result<(), String> {
+    if seen.is_none() && flagged.is_none() {
+        return Ok(());
+    }
+    let mut session = login(account, password)?;
+    session.select(imap_mailbox).map_err(friendly)?;
+    let uid = uid.to_string();
+    if let Some(on) = seen {
+        let query = if on {
+            "+FLAGS.SILENT (\\Seen)"
+        } else {
+            "-FLAGS.SILENT (\\Seen)"
+        };
+        session.uid_store(&uid, query).map_err(friendly)?;
+    }
+    if let Some(on) = flagged {
+        let query = if on {
+            "+FLAGS.SILENT (\\Flagged)"
+        } else {
+            "-FLAGS.SILENT (\\Flagged)"
+        };
+        session.uid_store(&uid, query).map_err(friendly)?;
+    }
+    let _ = session.logout();
+    Ok(())
+}
+
+pub fn archive_uid(
+    account: &Account,
+    password: &str,
+    source_imap: &str,
+    dest_imap: &str,
+    uid: u32,
+) -> Result<(), String> {
+    if source_imap.eq_ignore_ascii_case(dest_imap) {
+        return Err("That letter is already in Archive.".into());
+    }
+    let mut session = login(account, password)?;
+    session.select(source_imap).map_err(friendly)?;
+    let uid = uid.to_string();
+    if session.uid_mv(&uid, dest_imap).is_err() {
+        session
+            .uid_copy(&uid, quote_mailbox(dest_imap))
+            .map_err(friendly)?;
+        session
+            .uid_store(&uid, "+FLAGS.SILENT (\\Deleted)")
+            .map_err(friendly)?;
+        session.expunge().map_err(friendly)?;
+    }
+    let _ = session.logout();
+    Ok(())
+}
+
+fn quote_mailbox(name: &str) -> String {
+    if name.starts_with('"') && name.ends_with('"') {
+        return name.to_string();
+    }
+    format!("\"{}\"", name.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
 fn login(account: &Account, password: &str) -> Result<Session, String> {
     let host = account
         .imap_host
@@ -106,6 +174,7 @@ fn list_folders(session: &mut Session, account_id: &str) -> Result<Vec<MailFolde
         .list(Some(""), Some("*"))
         .map_err(friendly)?;
     let mut out = Vec::new();
+    let mut archives = Vec::new();
     let mut seen_canonical = std::collections::HashSet::new();
     for name in listed.iter() {
         let tokens: Vec<String> = name
@@ -117,15 +186,23 @@ fn list_folders(session: &mut Session, account_id: &str) -> Result<Vec<MailFolde
         let Some(class) = classify_imap_folder(name.name(), &refs) else {
             continue;
         };
-        if class.canonical != "custom" && !seen_canonical.insert(class.canonical) {
-            continue;
-        }
-        out.push(MailFolder {
+        let folder = MailFolder {
             account_id: account_id.to_string(),
             canonical: class.canonical.to_string(),
             imap_name: name.name().to_string(),
             label: class.label,
-        });
+        };
+        if class.canonical == "archive" {
+            archives.push(folder);
+            continue;
+        }
+        if class.canonical != "custom" && !seen_canonical.insert(class.canonical) {
+            continue;
+        }
+        out.push(folder);
+    }
+    if let Some(archive) = pick_archive(archives) {
+        out.push(archive);
     }
     if !out.iter().any(|f| f.canonical == "inbox") {
         out.insert(
@@ -183,6 +260,10 @@ fn fetch_named(
             continue;
         };
         let unread = !fetch.flags().iter().any(|flag| matches!(flag, Flag::Seen));
+        let flagged = fetch
+            .flags()
+            .iter()
+            .any(|flag| matches!(flag, Flag::Flagged));
         let (from_name, from_email) = from_parts(&parsed);
         let subject = html_to_plain(parsed.subject().unwrap_or("(no subject)"));
         let (body, html_body) = bodies(&parsed);
@@ -214,6 +295,7 @@ fn fetch_named(
                 .unwrap_or_else(|| chrono_fallback()),
             unread,
             waiting_on: false,
+            flagged,
             folder: folder_id,
             hero,
         });
@@ -229,12 +311,33 @@ fn message_folder(canonical: &str, imap_name: &str) -> String {
     }
 }
 
+fn pick_archive(mut folders: Vec<MailFolder>) -> Option<MailFolder> {
+    folders.sort_by_key(|f| archive_rank(&f.imap_name));
+    folders.into_iter().next()
+}
+
+fn archive_rank(imap_name: &str) -> u8 {
+    let lower = imap_name.to_ascii_lowercase();
+    let leaf = lower
+        .rsplit(['/', '.', '\\'])
+        .next()
+        .unwrap_or(lower.as_str());
+    if leaf == "archive" {
+        0
+    } else if lower.contains("all mail") || leaf == "all" {
+        1
+    } else {
+        2
+    }
+}
+
 fn folder_rank(canonical: &str) -> u8 {
     match canonical {
         "inbox" => 0,
         "sent" => 1,
         "drafts" => 2,
         "junk" => 3,
+        "archive" => 5,
         _ => 4,
     }
 }

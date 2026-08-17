@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addAccount, loadMailbox, removeAccount, sendMail, syncAccount } from "./api";
+import { addAccount, archiveMessage, loadMailbox, removeAccount, sendMail, setFlag, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -44,6 +44,7 @@ export default function App() {
   const [accountBusy, setAccountBusy] = useState(false);
   const [settingsNonce, setSettingsNonce] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
+  const seenOnOpen = useRef<string | null>(null);
 
   const refresh = useCallback((accountFilter: string | null) => {
     return loadMailbox(accountFilter).then(setMailbox);
@@ -190,6 +191,34 @@ export default function App() {
     }
   }
 
+  async function onSetFlag(
+    message: Message,
+    patch: { seen?: boolean; flagged?: boolean },
+  ) {
+    try {
+      const next = await setFlag({
+        accountId: message.accountId,
+        messageId: message.id,
+        seen: patch.seen,
+        flagged: patch.flagged,
+      });
+      setMailbox(next);
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function onArchive(message: Message) {
+    try {
+      const next = await archiveMessage(message.accountId, message.id);
+      setMailbox(next);
+      setOverlay("none");
+      setToast("Archived");
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   const move = useCallback(
     (delta: number) => {
       if (visible.length === 0) return;
@@ -224,16 +253,35 @@ export default function App() {
         return;
       }
       if (typing) return;
+      if (overlay === "compose" || overlay === "settings" || overlay === "staff") {
+        return;
+      }
       if (e.key === "j") move(1);
       if (e.key === "k") move(-1);
       if (e.key === "Enter" && selected) setOverlay("reader");
       if (e.key === "c" || e.key === "n") openCompose();
       if (e.key === "r" && selected) openCompose(selected);
-      if (e.key === "e") setToast("Archive waits on IMAP flags");
+      if (e.key === "e" && selected) void onArchive(selected);
+      if (e.key === "u" && selected) void onSetFlag(selected, { seen: false });
+      if (e.key === "s" && selected) {
+        void onSetFlag(selected, { flagged: !selected.flagged });
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [move, openCompose, selected]);
+  }, [move, openCompose, overlay, selected]);
+
+  useEffect(() => {
+    if (overlay !== "reader") {
+      seenOnOpen.current = null;
+      return;
+    }
+    if (!selected || seenOnOpen.current === selected.id) return;
+    seenOnOpen.current = selected.id;
+    if (selected.unread) {
+      void onSetFlag(selected, { seen: true });
+    }
+  }, [overlay, selected]);
 
   useEffect(() => {
     if (!toast) return;
@@ -303,6 +351,9 @@ export default function App() {
           account={accounts.find((a) => a.id === selected.accountId)}
           onClose={() => setOverlay("none")}
           onReply={() => openCompose(selected)}
+          onUnread={() => void onSetFlag(selected, { seen: false })}
+          onFlag={() => void onSetFlag(selected, { flagged: !selected.flagged })}
+          onArchive={() => void onArchive(selected)}
           onMailTo={openMailTo}
         />
       ) : null}

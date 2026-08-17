@@ -8,6 +8,14 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.3.0] - 2026-08-17
+
+### Added
+
+- IMAP flags: unread (`\Seen`), flag (`\Flagged`), and archive (MOVE, or COPY + `\Deleted` + EXPUNGE)
+- Opening a letter marks it `\Seen`; `e` archives, `u` marks unread, `s` toggles flag
+- Archive destination is `\Archive`, a folder named Archive, or Gmail All Mail (`\All`) — stored, not fetched
+
 ## [0.2.0] - 2026-08-17
 
 ### Added

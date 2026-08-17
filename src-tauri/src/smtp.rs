@@ -101,6 +101,7 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
         received_at: chrono::Utc::now().to_rfc3339(),
         unread: false,
         waiting_on: false,
+        flagged: false,
         folder: "sent".into(),
         hero: None,
     };

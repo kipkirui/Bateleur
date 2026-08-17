@@ -73,7 +73,12 @@ export function Feed({
                 onDoubleClick={() => onOpen(message.id)}
               >
                 <span className={message.unread ? "dot unread" : "dot"} />
-                <span className="raw-from">{readableText(message.fromName)}</span>
+                <span className="raw-from">
+                  {readableText(message.fromName)}
+                  {message.flagged ? (
+                    <span className="flag-mark" title="Flagged" />
+                  ) : null}
+                </span>
                 <span className="raw-subject">{readableText(message.subject)}</span>
                 <span className="raw-preview">{readableText(message.preview)}</span>
                 <span className="raw-when">{formatWhen(message.receivedAt)}</span>
@@ -101,7 +106,12 @@ export function Feed({
                     onDoubleClick={() => onOpen(message.id)}
                   >
                     <div className="action-top">
-                      <strong>{readableText(message.fromName)}</strong>
+                      <strong>
+                        {readableText(message.fromName)}
+                        {message.flagged ? (
+                          <span className="flag-mark" title="Flagged" />
+                        ) : null}
+                      </strong>
                       <span>{formatWhen(message.receivedAt)}</span>
                     </div>
                     <div className="action-subject">{readableText(message.subject)}</div>
@@ -136,6 +146,9 @@ export function Feed({
                     <h3>{readableText(message.subject)}</h3>
                     <div className="byline">
                       Latest by {readableText(message.fromName)}
+                      {message.flagged ? (
+                        <span className="flag-mark" title="Flagged" />
+                      ) : null}
                     </div>
                     <p>{readableText(message.preview)}</p>
                   </button>

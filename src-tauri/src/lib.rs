@@ -4,7 +4,10 @@ mod secrets;
 mod smtp;
 mod tls;
 
-use bateleur_core::{guess_servers, Account, AccountDraft, Mailbox, SendDraft, ServerGuess};
+use bateleur_core::{
+    guess_servers, parse_message_ref, Account, AccountDraft, FlagChange, Mailbox, SendDraft,
+    ServerGuess,
+};
 use std::sync::Mutex;
 use tauri::{Manager, State};
 
@@ -85,8 +88,8 @@ async fn add_account(state: State<'_, AppState>, draft: AccountDraft) -> Result<
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::upsert_account(&conn, &account)?;
         db::replace_folders(&conn, &account.id, &fetched.folders)?;
-        for message in fetched.messages {
-            db::upsert_message(&conn, &message)?;
+        for message in &fetched.messages {
+            db::upsert_message(&conn, message)?;
         }
         db::prune_stale_inbox(&conn, &account.id)?;
         if fetched
@@ -119,8 +122,8 @@ async fn sync_account(state: State<'_, AppState>, account_id: String) -> Result<
     let mailbox = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::replace_folders(&conn, &account.id, &fetched.folders)?;
-        for message in fetched.messages {
-            db::upsert_message(&conn, &message)?;
+        for message in &fetched.messages {
+            db::upsert_message(&conn, message)?;
         }
         db::prune_stale_inbox(&conn, &account.id)?;
         if fetched
@@ -175,6 +178,72 @@ async fn send_mail(state: State<'_, AppState>, draft: SendDraft) -> Result<Mailb
 }
 
 #[tauri::command]
+async fn set_flag(state: State<'_, AppState>, change: FlagChange) -> Result<Mailbox, String> {
+    if change.seen.is_none() && change.flagged.is_none() {
+        return Err("Nothing to change.".into());
+    }
+    let account = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::get_account(&conn, &change.account_id)?
+    };
+    let (folder_key, uid) = parse_message_ref(&account.id, &change.message_id)?;
+    let imap_name = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::imap_name_for_folder(&conn, &account.id, &folder_key)?
+    };
+    let password = secrets::load_password(&account.address)?;
+    let to_run = account.clone();
+    let seen = change.seen;
+    let flagged = change.flagged;
+    tauri::async_runtime::spawn_blocking(move || {
+        imap::set_flags(&to_run, &password, &imap_name, uid, seen, flagged)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    let mailbox = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::apply_flag_change(&conn, &change.message_id, change.seen, change.flagged)?;
+        db::load_mailbox(&conn)?
+    };
+    Ok(mailbox)
+}
+
+#[tauri::command]
+async fn archive_message(
+    state: State<'_, AppState>,
+    account_id: String,
+    message_id: String,
+) -> Result<Mailbox, String> {
+    let account = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::get_account(&conn, &account_id)?
+    };
+    let (folder_key, uid) = parse_message_ref(&account.id, &message_id)?;
+    let (source_imap, dest_imap) = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        (
+            db::imap_name_for_folder(&conn, &account.id, &folder_key)?,
+            db::archive_imap_name(&conn, &account.id)?,
+        )
+    };
+    let password = secrets::load_password(&account.address)?;
+    let to_run = account.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        imap::archive_uid(&to_run, &password, &source_imap, &dest_imap, uid)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    let mailbox = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::delete_message(&conn, &message_id)?;
+        db::load_mailbox(&conn)?
+    };
+    Ok(mailbox)
+}
+
+#[tauri::command]
 fn remove_account(state: State<AppState>, account_id: String) -> Result<Mailbox, String> {
     let account = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
@@ -204,6 +273,8 @@ pub fn run() {
             add_account,
             sync_account,
             send_mail,
+            set_flag,
+            archive_message,
             remove_account
         ])
         .run(tauri::generate_context!())

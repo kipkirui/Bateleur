@@ -4,7 +4,7 @@ Living checklist against the product in [`Make Email Great Again.md`](./Make%20E
 
 ## Shipped
 
-**Shell.** Staff-off homepage: left rail (~220px), center feed, Co-Pilot drawer collapsed. Magazine | Raw. Day / night paper. Compose overlay (Cmd+N). Settings overlay is mailboxes only — no separate Add Account window. Hire staff opens the BYOK modal. Keyboard: j/k, Enter, r, c, Ctrl+K, Esc. Overlay hover scrollbars on rail and feed. Desk waiting-on is empty until the user flags something — no fake “Acme quote” copy. Fixture / demo mailboxes are gone; the UI never seeds sample accounts or messages.
+**Shell.** Staff-off homepage: left rail (~220px), center feed, Co-Pilot drawer collapsed. Magazine | Raw. Day / night paper. Compose overlay (Cmd+N). Settings overlay is mailboxes only — no separate Add Account window. Hire staff opens the BYOK modal. Keyboard: j/k, Enter, r, c, e (archive), u (unread), s (flag), Ctrl+K, Esc. Overlay hover scrollbars on rail and feed. Desk waiting-on is empty until the user flags something — no fake “Acme quote” copy. Fixture / demo mailboxes are gone; the UI never seeds sample accounts or messages.
 
 **Accounts.** Any IMAP mailbox via Settings → Mail. Autoconfig guesses hosts for Gmail, Outlook, Fastmail, Yahoo, iCloud. Manual host / port / username. TLS via rustls (Mozilla roots + OS store), with an explicit “trust this certificate” override. Password lives in the OS keychain (`bateleur.imap` / sanitized address), never SQLite. Save requires a persistent platform store (Windows Credential Manager / macOS Keychain / Secret Service) and round-trips through a *new* keyring entry so an in-memory mock cannot look like success. Re-adding the same address updates that mailbox instead of duplicating it. If Sync reports no password, add the mailbox again from Settings so the secret is written to the real store.
 
@@ -12,7 +12,9 @@ Living checklist against the product in [`Make Email Great Again.md`](./Make%20E
 
 **Send.** Confirm-gated SMTP via `lettre` (STARTTLS on 587, implicit TLS on 465). Compose / Reply / mailto: pick a From mailbox, then **Send** then **Confirm send**. The same OS-keychain password is used. After SMTP succeeds we IMAP APPEND the RFC822 to the account’s Sent folder (`\Seen`). If APPEND fails, a local Sent copy is still stored. Gmail/Outlook still need an app password. Empty body or a missing To address is refused.
 
-**Reader.** The HTML MIME part is what we open, not the text conversion. Newsletters (Facebook, Gmail, etc.) keep `<style>` as CSS — including `:root` color-scheme, `@font-face`, and Gmail’s `u + .body` hacks — instead of dumping those rules as the letter. Scripts, forms, and `javascript:` URLs are stripped; tables, images, and author CSS stay. The iframe does not force Bateleur serif/charcoal onto the letter. Remote https images load; `cid:` inline images do not yet. http(s) links open in the system browser. `mailto:` opens Compose in Bateleur. Plain text autolinks URLs and addresses. Toggle to plain text when HTML is present. Gmail App-password hint in Settings.
+**Reader.** The HTML MIME part is what we open, not the text conversion. Newsletters (Facebook, Gmail, etc.) keep `<style>` as CSS — including `:root` color-scheme, `@font-face`, and Gmail’s `u + .body` hacks — instead of dumping those rules as the letter. Scripts, forms, and `javascript:` URLs are stripped; tables, images, and author CSS stay. The iframe does not force Bateleur serif/charcoal onto the letter. Remote https images load; `cid:` inline images do not yet. http(s) links open in the system browser. `mailto:` opens Compose in Bateleur. Plain text autolinks URLs and addresses. Toggle to plain text when HTML is present. Gmail App-password hint in Settings. Opening a letter STOREs `\Seen`. Reader footer: Unread, Flag, Archive, Reply.
+
+**Flags.** Unread (`\Seen`), flag (`\Flagged`), and archive. Archive uses IMAP MOVE when the server allows it, otherwise COPY + `\Deleted` + EXPUNGE. Destination is `\Archive`, a folder named Archive, or Gmail `[Gmail]/All Mail` (`\All`). That folder is listed and stored so archive has somewhere to go; it is not fetched into the feed. Local-only Sent copies (`sent:…`) cannot STORE — sync first. IMAP succeeds, then SQLite.
 
 **Plain text and summaries.** Subjects, from-names, feed previews, and the plain-text body decode HTML entities (`&nbsp;`, `&#160;`, `&amp;`, …) and strip leftover tags (`<strong>`, `<b>`, `<bold>`, `<em>`, …). Full HTML still renders those tags (nonstandard `<bold>` is treated as `<strong>`). Cleanup runs on display for already-cached mail; **Sync** writes the cleaned preview/body into SQLite.
 
@@ -23,7 +25,6 @@ Living checklist against the product in [`Make Email Great Again.md`](./Make%20E
 These are required before Bateleur is an Outlook-shaped client, not a reader.
 
 - POP ingest on the same SQLite schema
-- IMAP flags: archive, unread, flag/star; `e` still toasts
 - Attachments (list, save, compose attach)
 - Inline `cid:` images
 - Optional “load remote images” switch (newsletters currently load https images)

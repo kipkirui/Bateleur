@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AccountDraft, Mailbox, SendDraft, ServerGuess } from "./types";
+import type { AccountDraft, FlagChange, Mailbox, SendDraft, ServerGuess } from "./types";
 
 function fromParts(
   accounts: Mailbox["accounts"],
@@ -62,4 +62,23 @@ export async function sendMail(draft: SendDraft): Promise<Mailbox> {
   }
   const mailbox = await invoke<Mailbox>("send_mail", { draft });
   return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, draft.accountId);
+}
+
+export async function setFlag(change: FlagChange): Promise<Mailbox> {
+  if (!isTauri()) {
+    throw new Error("Flags need the desktop app.");
+  }
+  const mailbox = await invoke<Mailbox>("set_flag", { change });
+  return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, change.accountId);
+}
+
+export async function archiveMessage(
+  accountId: string,
+  messageId: string,
+): Promise<Mailbox> {
+  if (!isTauri()) {
+    throw new Error("Archive needs the desktop app.");
+  }
+  const mailbox = await invoke<Mailbox>("archive_message", { accountId, messageId });
+  return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, accountId);
 }

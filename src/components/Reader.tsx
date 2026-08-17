@@ -8,10 +8,22 @@ type Props = {
   account?: Account;
   onClose: () => void;
   onReply: () => void;
+  onUnread: () => void;
+  onFlag: () => void;
+  onArchive: () => void;
   onMailTo: (mail: MailTo) => void;
 };
 
-export function Reader({ message, account, onClose, onReply, onMailTo }: Props) {
+export function Reader({
+  message,
+  account,
+  onClose,
+  onReply,
+  onUnread,
+  onFlag,
+  onArchive,
+  onMailTo,
+}: Props) {
   const html = letterHtml(message);
   return (
     <div className="overlay" role="dialog" aria-modal="true">
@@ -27,9 +39,21 @@ export function Reader({ message, account, onClose, onReply, onMailTo }: Props) 
         <h1>{readableText(message.subject)}</h1>
         <div className="byline">
           {readableText(message.fromName)} &lt;{message.fromEmail}&gt;
+          {message.flagged ? <span className="flag-mark" title="Flagged" /> : null}
         </div>
         <Letter message={message} onMailTo={onMailTo} />
         <footer>
+          <div className="reader-actions">
+            <button type="button" className="text-btn" onClick={onUnread}>
+              Unread
+            </button>
+            <button type="button" className="text-btn" onClick={onFlag}>
+              {message.flagged ? "Unflag" : "Flag"}
+            </button>
+            <button type="button" className="text-btn" onClick={onArchive}>
+              Archive
+            </button>
+          </div>
           <button type="button" className="desk-cta" onClick={onReply}>
             Reply
           </button>
