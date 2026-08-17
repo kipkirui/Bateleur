@@ -9,7 +9,7 @@ import { Rail } from "./components/Rail";
 import { Reader } from "./components/Reader";
 import { Settings } from "./components/Settings";
 import { StaffModal } from "./components/StaffModal";
-import type { AccountDraft, FeedId, Mailbox, Message, ReaderMode } from "./types";
+import type { AccountDraft, DraftAttachment, FeedId, Mailbox, Message, ReaderMode } from "./types";
 import type { MailTo } from "./lib/links";
 import "./styles.css";
 
@@ -37,6 +37,7 @@ export default function App() {
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
   const [composeFromId, setComposeFromId] = useState("");
+  const [composeFiles, setComposeFiles] = useState<DraftAttachment[]>([]);
   const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -95,6 +96,7 @@ export default function App() {
     setComposeSubject(mail.subject);
     setComposeBody(mail.body ? toEditorHtml(mail.body) : "");
     setComposeFromId(accountId ?? accounts[0]?.id ?? "");
+    setComposeFiles([]);
     setSendError(null);
     setOverlay("compose");
   }, [accountId, accounts]);
@@ -108,6 +110,7 @@ export default function App() {
         : "",
     );
     setComposeFromId(draft?.accountId ?? accountId ?? accounts[0]?.id ?? "");
+    setComposeFiles([]);
     setSendError(null);
     setOverlay("compose");
   }, [accountId, accounts]);
@@ -147,6 +150,7 @@ export default function App() {
         subject: composeSubject,
         body: readableText(composeBody),
         html: composeBody,
+        attachments: composeFiles,
         confirm: true,
       });
       setMailbox(next);
@@ -154,6 +158,7 @@ export default function App() {
       setComposeTo("");
       setComposeSubject("");
       setComposeBody("");
+      setComposeFiles([]);
       setFeed("sent");
       setAccountId(from);
       setToast("Sent");
@@ -369,9 +374,14 @@ export default function App() {
           onTo={setComposeTo}
           onSubject={setComposeSubject}
           onBody={setComposeBody}
+          files={composeFiles}
+          onFiles={setComposeFiles}
           busy={sendBusy}
           error={sendError}
-          onClose={() => setOverlay("none")}
+          onClose={() => {
+            setOverlay("none");
+            setComposeFiles([]);
+          }}
           onSend={() => void onSend()}
         />
       ) : null}

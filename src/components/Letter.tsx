@@ -5,6 +5,7 @@ import {
   looksLikeCssDump,
   stripCssNoise,
   readableText,
+  rewriteCidImages,
 } from "../lib/emailHtml";
 import {
   isHttpUrl,
@@ -14,11 +15,12 @@ import {
   parseMailto,
   type MailTo,
 } from "../lib/links";
-import type { Message } from "../types";
+import type { InlinePart, Message } from "../types";
 
 type Props = {
   message: Message;
   onMailTo: (mail: MailTo) => void;
+  cidParts?: InlinePart[];
 };
 
 export function letterHtml(message: Message): string | null {
@@ -29,26 +31,27 @@ export function letterHtml(message: Message): string | null {
   return null;
 }
 
-export function Letter({ message, onMailTo }: Props) {
+export function Letter({ message, onMailTo, cidParts = [] }: Props) {
   const html = letterHtml(message);
-  const [mode, setMode] = useState<"html" | "text">(html ? "html" : "text");
+  const src = html ? rewriteCidImages(html, cidParts) : null;
+  const [mode, setMode] = useState<"html" | "text">(src ? "html" : "text");
 
   useEffect(() => {
-    setMode(html ? "html" : "text");
-  }, [html, message.id]);
+    setMode(src ? "html" : "text");
+  }, [src, message.id]);
 
   return (
     <>
-      {html && mode === "text" ? (
+      {src && mode === "text" ? (
         <div className="letter-switch">
           <button type="button" className="text-btn" onClick={() => setMode("html")}>
             Show original HTML
           </button>
         </div>
       ) : null}
-      {html && mode === "html" ? (
+      {src && mode === "html" ? (
         <>
-          <HtmlLetter key={message.id} html={html} onMailTo={onMailTo} />
+          <HtmlLetter key={message.id} html={src} onMailTo={onMailTo} />
           <div className="letter-switch">
             <button type="button" className="text-btn" onClick={() => setMode("text")}>
               Show plain text

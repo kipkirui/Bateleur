@@ -2,6 +2,7 @@ use bateleur_core::{
     classify_feed, classify_imap_folder, html_to_plain, preview_text, Account, Hero, MailFolder,
     Message,
 };
+use crate::attach::{self, StoredPart};
 use imap::types::{Flag, NameAttribute};
 use mail_parser::{MessageParser, PartType};
 use rustls::pki_types::ServerName;
@@ -16,12 +17,14 @@ type Session = imap::Session<TlsStream>;
 pub struct FetchResult {
     pub messages: Vec<Message>,
     pub folders: Vec<MailFolder>,
+    pub parts: Vec<StoredPart>,
 }
 
 pub fn fetch_account(account: &Account, password: &str) -> Result<FetchResult, String> {
     let mut session = login(account, password)?;
     let folders = list_folders(&mut session, &account.id)?;
     let mut messages = Vec::new();
+    let mut parts = Vec::new();
     let mut custom_fetched = 0;
     for folder in &folders {
         let limit = match folder.canonical.as_str() {
@@ -38,7 +41,10 @@ pub fn fetch_account(account: &Account, password: &str) -> Result<FetchResult, S
             _ => continue,
         };
         match fetch_named(&mut session, account, folder, limit) {
-            Ok(mut batch) => messages.append(&mut batch),
+            Ok((mut batch, mut batch_parts)) => {
+                messages.append(&mut batch);
+                parts.append(&mut batch_parts);
+            }
             Err(err) => {
                 if folder.canonical == "inbox" {
                     let _ = session.logout();
@@ -48,14 +54,18 @@ pub fn fetch_account(account: &Account, password: &str) -> Result<FetchResult, S
         }
     }
     let _ = session.logout();
-    Ok(FetchResult { messages, folders })
+    Ok(FetchResult {
+        messages,
+        folders,
+        parts,
+    })
 }
 
 pub fn append_sent(
     account: &Account,
     password: &str,
     rfc822: &[u8],
-) -> Result<Option<Message>, String> {
+) -> Result<Option<(Message, Vec<StoredPart>)>, String> {
     let mut session = login(account, password)?;
     let folders = list_folders(&mut session, &account.id)?;
     let sent = folders
@@ -72,7 +82,7 @@ pub fn append_sent(
         .map_err(friendly)?;
     let fetched = fetch_named(&mut session, account, &sent, 1).ok();
     let _ = session.logout();
-    Ok(fetched.and_then(|mut batch| batch.pop()))
+    Ok(fetched.and_then(|(mut batch, parts)| batch.pop().map(|message| (message, parts))))
 }
 
 pub fn set_flags(
@@ -238,11 +248,11 @@ fn fetch_named(
     account: &Account,
     folder: &MailFolder,
     limit: u32,
-) -> Result<Vec<Message>, String> {
+) -> Result<(Vec<Message>, Vec<StoredPart>), String> {
     let mailbox = session.select(&folder.imap_name).map_err(friendly)?;
     let exists = mailbox.exists;
     if exists == 0 {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), Vec::new()));
     }
     let start = exists.saturating_sub(limit.saturating_sub(1)).max(1);
     let seq = format!("{start}:{exists}");
@@ -251,6 +261,7 @@ fn fetch_named(
         .map_err(friendly)?;
 
     let mut out = Vec::new();
+    let mut parts = Vec::new();
     for fetch in fetches.iter() {
         let Some(uid) = fetch.uid else { continue };
         let Some(raw) = fetch.body() else {
@@ -279,8 +290,12 @@ fn fetch_named(
             None
         };
         let folder_id = message_folder(&folder.canonical, &folder.imap_name);
+        let id = format!("{}:{folder_id}:{uid}", account.id);
+        let extracted = attach::extract(&parsed, &id);
+        let attachments = extracted.iter().map(|p| p.meta.clone()).collect();
+        parts.extend(extracted);
         out.push(Message {
-            id: format!("{}:{folder_id}:{uid}", account.id),
+            id,
             account_id: account.id.clone(),
             feed,
             from_name,
@@ -298,9 +313,10 @@ fn fetch_named(
             flagged,
             folder: folder_id,
             hero,
+            attachments,
         });
     }
-    Ok(out)
+    Ok((out, parts))
 }
 
 fn message_folder(canonical: &str, imap_name: &str) -> String {

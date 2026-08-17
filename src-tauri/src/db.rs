@@ -1,5 +1,7 @@
-use bateleur_core::{Account, Hero, MailFolder, Mailbox, Message};
+use crate::attach::StoredPart;
+use bateleur_core::{Account, Attachment, Hero, MailFolder, Mailbox, Message};
 use rusqlite::{params, Connection};
+use std::collections::HashMap;
 
 pub fn open(path: &std::path::Path) -> Result<Connection, String> {
     let conn = Connection::open(path).map_err(err)?;
@@ -40,6 +42,18 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
             label TEXT NOT NULL,
             PRIMARY KEY (account_id, imap_name)
         );
+        CREATE TABLE IF NOT EXISTS attachments (
+            id TEXT PRIMARY KEY,
+            message_id TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            size INTEGER NOT NULL,
+            content_id TEXT,
+            inline INTEGER NOT NULL,
+            stored INTEGER NOT NULL,
+            bytes BLOB NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS attachments_message ON attachments(message_id);
         ",
     )
     .map_err(err)?;
@@ -85,6 +99,26 @@ pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
         .map_err(err)?;
     for row in rows {
         messages.push(row.map_err(err)?);
+    }
+
+    let mut by_message: HashMap<String, Vec<Attachment>> = HashMap::new();
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, message_id, filename, content_type, size, content_id, inline, stored
+             FROM attachments ORDER BY filename",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([], |row| attachment_meta_from_row(row))
+        .map_err(err)?;
+    for row in rows {
+        let (message_id, meta) = row.map_err(err)?;
+        by_message.entry(message_id).or_default().push(meta);
+    }
+    for message in &mut messages {
+        if let Some(list) = by_message.remove(&message.id) {
+            message.attachments = list;
+        }
     }
 
     let mut folders = Vec::new();
@@ -193,6 +227,92 @@ pub fn prune_stale_inbox(conn: &Connection, account_id: &str) -> Result<(), Stri
     Ok(())
 }
 
+pub fn persist_message(
+    conn: &Connection,
+    message: &Message,
+    parts: &[StoredPart],
+) -> Result<(), String> {
+    upsert_message(conn, message)?;
+    replace_attachments(conn, &message.id, parts)
+}
+
+pub fn replace_attachments(
+    conn: &Connection,
+    message_id: &str,
+    parts: &[StoredPart],
+) -> Result<(), String> {
+    conn.execute("DELETE FROM attachments WHERE message_id = ?1", [message_id])
+        .map_err(err)?;
+    for part in parts.iter().filter(|p| p.message_id == message_id) {
+        conn.execute(
+            "INSERT INTO attachments
+             (id, message_id, filename, content_type, size, content_id, inline, stored, bytes)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                part.meta.id,
+                part.message_id,
+                part.meta.filename,
+                part.meta.content_type,
+                part.meta.size as i64,
+                part.meta.content_id,
+                part.meta.inline as i64,
+                part.meta.stored as i64,
+                part.bytes,
+            ],
+        )
+        .map_err(err)?;
+    }
+    Ok(())
+}
+
+pub fn prune_orphan_attachments(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM attachments WHERE message_id NOT IN (SELECT id FROM messages)",
+        [],
+    )
+    .map_err(err)?;
+    Ok(())
+}
+
+pub fn attachment_bytes(conn: &Connection, id: &str) -> Result<(String, String, Vec<u8>, bool), String> {
+    conn.query_row(
+        "SELECT filename, content_type, bytes, stored FROM attachments WHERE id = ?1",
+        [id],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get::<_, i64>(3)? != 0,
+            ))
+        },
+    )
+    .map_err(err)
+}
+
+pub fn inline_parts(
+    conn: &Connection,
+    message_id: &str,
+) -> Result<Vec<(String, String, Vec<u8>)>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT content_id, content_type, bytes FROM attachments
+             WHERE message_id = ?1 AND inline = 1 AND stored = 1
+               AND content_id IS NOT NULL AND length(bytes) > 0",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([message_id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .map_err(err)?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row.map_err(err)?);
+    }
+    Ok(out)
+}
+
 pub fn prune_local_sent(conn: &Connection, account_id: &str) -> Result<(), String> {
     conn.execute(
         "DELETE FROM messages
@@ -205,6 +325,11 @@ pub fn prune_local_sent(conn: &Connection, account_id: &str) -> Result<(), Strin
 
 pub fn remove_account(conn: &Connection, id: &str) -> Result<Account, String> {
     let account = get_account(conn, id)?;
+    conn.execute(
+        "DELETE FROM attachments WHERE message_id IN (SELECT id FROM messages WHERE account_id = ?1)",
+        [id],
+    )
+    .map_err(err)?;
     conn.execute("DELETE FROM messages WHERE account_id = ?1", [id])
         .map_err(err)?;
     conn.execute("DELETE FROM folders WHERE account_id = ?1", [id])
@@ -271,6 +396,8 @@ pub fn apply_flag_change(
 }
 
 pub fn delete_message(conn: &Connection, id: &str) -> Result<(), String> {
+    conn.execute("DELETE FROM attachments WHERE message_id = ?1", [id])
+        .map_err(err)?;
     conn.execute("DELETE FROM messages WHERE id = ?1", [id])
         .map_err(err)?;
     Ok(())
@@ -333,7 +460,25 @@ fn message_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
             _ => None,
         },
         html_body: row.get(14)?,
+        attachments: Vec::new(),
     })
+}
+
+fn attachment_meta_from_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<(String, Attachment)> {
+    Ok((
+        row.get(1)?,
+        Attachment {
+            id: row.get(0)?,
+            filename: row.get(2)?,
+            content_type: row.get(3)?,
+            size: row.get::<_, i64>(4)? as u64,
+            content_id: row.get(5)?,
+            inline: row.get::<_, i64>(6)? != 0,
+            stored: row.get::<_, i64>(7)? != 0,
+        },
+    ))
 }
 
 fn account_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Account> {

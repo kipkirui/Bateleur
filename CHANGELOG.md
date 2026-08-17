@@ -8,6 +8,13 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.4.0] - 2026-08-17
+
+### Added
+
+- Attachments: listed in the reader, saved to Downloads, attached on compose (up to eight files, 8 MB each)
+- Inline `cid:` images rewrite from cached MIME parts when you open a letter
+
 ## [0.3.0] - 2026-08-17
 
 ### Added

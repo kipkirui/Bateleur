@@ -1,11 +1,12 @@
+use crate::attach::{self, StoredPart};
 use bateleur_core::{preview_text, Account, Message, SendDraft};
-use lettre::message::{header::ContentType, Mailbox, MultiPart, SinglePart};
+use lettre::message::{header::ContentType, Attachment, Mailbox, MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{Message as SmtpMessage, SmtpTransport, Transport};
 use std::str::FromStr;
 
-pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Message, Vec<u8>), String> {
+pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Message, Vec<u8>, Vec<StoredPart>), String> {
     if !draft.confirm {
         return Err("Send is confirm-gated. Confirm the letter before it goes out.".into());
     }
@@ -52,27 +53,9 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
         .as_deref()
         .map(str::trim)
         .filter(|h| !h.is_empty() && looks_like_markup(h));
-    let email = if let Some(html) = html {
-        builder
-            .multipart(
-                MultiPart::alternative()
-                    .singlepart(
-                        SinglePart::builder()
-                            .header(ContentType::TEXT_PLAIN)
-                            .body(body.clone()),
-                    )
-                    .singlepart(
-                        SinglePart::builder()
-                            .header(ContentType::TEXT_HTML)
-                            .body(wrap_html(html)),
-                    ),
-            )
-            .map_err(|e| format!("Could not build the letter ({e})"))?
-    } else {
-        builder
-            .body(body.clone())
-            .map_err(|e| format!("Could not build the letter ({e})"))?
-    };
+    let message_id = format!("sent:{}:{}", account.id, uuid::Uuid::new_v4());
+    let parts = attach::from_draft(&message_id, &draft.attachments)?;
+    let email = build_letter(builder, &body, html, &parts)?;
 
     let creds = Credentials::new(user.to_string(), password);
     let mailer = transport(&host, port, account.trust_tls, creds)?;
@@ -85,7 +68,7 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
         .collect::<Vec<_>>()
         .join(", ");
     let message = Message {
-        id: format!("sent:{}:{}", account.id, uuid::Uuid::new_v4()),
+        id: message_id,
         account_id: account.id.clone(),
         feed: "reading".into(),
         from_name: from.name.unwrap_or_else(|| account.address.clone()),
@@ -104,8 +87,57 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
         flagged: false,
         folder: "sent".into(),
         hero: None,
+        attachments: parts.iter().map(|p| p.meta.clone()).collect(),
     };
-    Ok((message, rfc822))
+    Ok((message, rfc822, parts))
+}
+
+fn build_letter(
+    builder: lettre::message::MessageBuilder,
+    body: &str,
+    html: Option<&str>,
+    parts: &[StoredPart],
+) -> Result<SmtpMessage, String> {
+    let alternative = if let Some(html) = html {
+        MultiPart::alternative()
+            .singlepart(
+                SinglePart::builder()
+                    .header(ContentType::TEXT_PLAIN)
+                    .body(body.to_string()),
+            )
+            .singlepart(
+                SinglePart::builder()
+                    .header(ContentType::TEXT_HTML)
+                    .body(wrap_html(html)),
+            )
+    } else {
+        MultiPart::alternative().singlepart(
+            SinglePart::builder()
+                .header(ContentType::TEXT_PLAIN)
+                .body(body.to_string()),
+        )
+    };
+    if parts.is_empty() && html.is_some() {
+        return builder
+            .multipart(alternative)
+            .map_err(|e| format!("Could not build the letter ({e})"));
+    }
+    if parts.is_empty() {
+        return builder
+            .body(body.to_string())
+            .map_err(|e| format!("Could not build the letter ({e})"));
+    }
+    let mut mixed = MultiPart::mixed().multipart(alternative);
+    for part in parts {
+        let ct = ContentType::parse(&part.meta.content_type)
+            .unwrap_or_else(|_| ContentType::parse("application/octet-stream").expect("octet"));
+        mixed = mixed.singlepart(
+            Attachment::new(part.meta.filename.clone()).body(part.bytes.clone(), ct),
+        );
+    }
+    builder
+        .multipart(mixed)
+        .map_err(|e| format!("Could not build the letter ({e})"))
 }
 
 fn transport(

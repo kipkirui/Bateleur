@@ -405,6 +405,55 @@ kbd {
   vertical-align: 1px;
 }
 
+.file-count {
+  margin-top: 6px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.attach-list {
+  margin: 18px 0 8px;
+  border-top: 1px solid var(--rule);
+  padding-top: 14px;
+}
+
+.attach-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 14px;
+}
+
+.attach-compose {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.attach-picker {
+  cursor: pointer;
+}
+
+.attach-chip {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--rule);
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.muted {
+  color: var(--ink-soft);
+}
+
 .desk.collapsed {
   padding: 0;
   align-items: stretch;

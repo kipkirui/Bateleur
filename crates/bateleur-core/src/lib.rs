@@ -65,6 +65,27 @@ pub struct Message {
     pub flagged: bool,
     pub folder: String,
     pub hero: Option<Hero>,
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Attachment {
+    pub id: String,
+    pub filename: String,
+    pub content_type: String,
+    pub size: u64,
+    #[serde(default)]
+    pub content_id: Option<String>,
+    #[serde(default)]
+    pub inline: bool,
+    #[serde(default = "stored_true")]
+    pub stored: bool,
+}
+
+fn stored_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,6 +134,16 @@ pub struct SendDraft {
     pub confirm: bool,
     #[serde(default)]
     pub html: Option<String>,
+    #[serde(default)]
+    pub attachments: Vec<DraftAttachment>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftAttachment {
+    pub filename: String,
+    pub content_type: String,
+    pub data: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

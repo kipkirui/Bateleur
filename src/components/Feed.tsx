@@ -116,6 +116,9 @@ export function Feed({
                     </div>
                     <div className="action-subject">{readableText(message.subject)}</div>
                     <p>{readableText(message.preview)}</p>
+                    {fileCount(message) ? (
+                      <div className="file-count">{fileLabel(fileCount(message))}</div>
+                    ) : null}
                   </button>
                 ))}
             </div>
@@ -151,6 +154,9 @@ export function Feed({
                       ) : null}
                     </div>
                     <p>{readableText(message.preview)}</p>
+                    {fileCount(message) ? (
+                      <div className="file-count">{fileLabel(fileCount(message))}</div>
+                    ) : null}
                   </button>
                 ))}
             </div>
@@ -159,4 +165,12 @@ export function Feed({
       )}
     </section>
   );
+}
+
+function fileCount(message: Message): number {
+  return (message.attachments ?? []).filter((a) => !a.inline).length;
+}
+
+function fileLabel(n: number): string {
+  return n === 1 ? "1 file" : `${n} files`;
 }

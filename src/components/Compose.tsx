@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { readableText } from "../lib/emailHtml";
-import type { Account } from "../types";
+import type { Account, DraftAttachment } from "../types";
 import { ConfirmModal } from "./ConfirmModal";
 import { LetterEditor } from "./LetterEditor";
 
@@ -14,6 +14,8 @@ type Props = {
   onTo: (value: string) => void;
   onSubject: (value: string) => void;
   onBody: (value: string) => void;
+  files: DraftAttachment[];
+  onFiles: (files: DraftAttachment[]) => void;
   busy: boolean;
   error: string | null;
   onClose: () => void;
@@ -30,6 +32,8 @@ export function Compose({
   onTo,
   onSubject,
   onBody,
+  files,
+  onFiles,
   busy,
   error,
   onClose,
@@ -84,6 +88,36 @@ export function Compose({
           <input value={subject} onChange={(e) => onSubject(e.target.value)} />
         </label>
         <LetterEditor value={body} onChange={onBody} disabled={busy} />
+        <div className="attach-compose">
+          <label className="text-btn attach-picker">
+            Attach
+            <input
+              type="file"
+              multiple
+              hidden
+              disabled={busy}
+              onChange={(e) => {
+                const list = e.target.files;
+                e.target.value = "";
+                if (!list) return;
+                void addFiles(list, files, onFiles);
+              }}
+            />
+          </label>
+          {files.map((file, index) => (
+            <span key={`${file.filename}-${index}`} className="attach-chip">
+              {file.filename}
+              <button
+                type="button"
+                className="text-btn"
+                disabled={busy}
+                onClick={() => onFiles(files.filter((_, i) => i !== index))}
+              >
+                Remove
+              </button>
+            </span>
+          ))}
+        </div>
         {error ? <p className="form-error">{error}</p> : null}
         <footer>
           <button type="button" className="text-btn" onClick={onClose}>
@@ -109,4 +143,35 @@ export function Compose({
       ) : null}
     </div>
   );
+}
+
+const MAX_FILES = 8;
+const MAX_BYTES = 8 * 1024 * 1024;
+
+async function addFiles(
+  list: FileList,
+  current: DraftAttachment[],
+  onFiles: (files: DraftAttachment[]) => void,
+) {
+  const next = [...current];
+  for (const file of [...list]) {
+    if (next.length >= MAX_FILES) break;
+    if (file.size > MAX_BYTES) continue;
+    const data = await readDataUrl(file);
+    next.push({
+      filename: file.name,
+      contentType: file.type || "application/octet-stream",
+      data,
+    });
+  }
+  onFiles(next);
+}
+
+function readDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }

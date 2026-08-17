@@ -128,6 +128,25 @@ export function stripCssNoise(text: string): string {
   return out.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+export function rewriteCidImages(
+  html: string,
+  parts: { contentId: string; contentType: string; data: string }[],
+): string {
+  if (!html || parts.length === 0) return html;
+  const byId = new Map<string, string>();
+  for (const part of parts) {
+    const id = part.contentId.replace(/^<|>$/g, "").trim().toLowerCase();
+    if (!id || !part.data) continue;
+    const mime = part.contentType.trim() || "application/octet-stream";
+    byId.set(id, `data:${mime};base64,${part.data}`);
+  }
+  if (byId.size === 0) return html;
+  return html.replace(/cid:\s*<?([^>\s"'<>]+)>?/gi, (full, raw: string) => {
+    const key = String(raw).replace(/^<|>$/g, "").trim().toLowerCase();
+    return byId.get(key) ?? full;
+  });
+}
+
 export function sanitizeEmailHtml(html: string): string {
   const recovered = wrapLeadingCss(html);
   const doc = new DOMParser().parseFromString(recovered, "text/html");
@@ -173,7 +192,8 @@ export function sanitizeEmailHtml(html: string): string {
       if (
         (name === "src" || name === "background" || name === "poster") &&
         !/^https?:\/\//i.test(value) &&
-        !lower.startsWith("data:image/")
+        !lower.startsWith("data:image/") &&
+        !lower.startsWith("cid:")
       ) {
         el.removeAttribute(attr.name);
       }

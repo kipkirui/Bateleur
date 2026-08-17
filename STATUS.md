@@ -12,9 +12,11 @@ Living checklist against the product in [`Make Email Great Again.md`](./Make%20E
 
 **Send.** Confirm-gated SMTP via `lettre` (STARTTLS on 587, implicit TLS on 465). Compose / Reply / mailto: pick a From mailbox, then **Send** then **Confirm send**. The same OS-keychain password is used. After SMTP succeeds we IMAP APPEND the RFC822 to the account’s Sent folder (`\Seen`). If APPEND fails, a local Sent copy is still stored. Gmail/Outlook still need an app password. Empty body or a missing To address is refused.
 
-**Reader.** The HTML MIME part is what we open, not the text conversion. Newsletters (Facebook, Gmail, etc.) keep `<style>` as CSS — including `:root` color-scheme, `@font-face`, and Gmail’s `u + .body` hacks — instead of dumping those rules as the letter. Scripts, forms, and `javascript:` URLs are stripped; tables, images, and author CSS stay. The iframe does not force Bateleur serif/charcoal onto the letter. Remote https images load; `cid:` inline images do not yet. http(s) links open in the system browser. `mailto:` opens Compose in Bateleur. Plain text autolinks URLs and addresses. Toggle to plain text when HTML is present. Gmail App-password hint in Settings. Opening a letter STOREs `\Seen`. Reader footer: Unread, Flag, Archive, Reply.
+**Reader.** The HTML MIME part is what we open, not the text conversion. Newsletters (Facebook, Gmail, etc.) keep `<style>` as CSS — including `:root` color-scheme, `@font-face`, and Gmail’s `u + .body` hacks — instead of dumping those rules as the letter. Scripts, forms, and `javascript:` URLs are stripped; tables, images, and author CSS stay. The iframe does not force Bateleur serif/charcoal onto the letter. Remote https images load; `cid:` inline images rewrite from cached MIME parts. http(s) links open in the system browser. `mailto:` opens Compose in Bateleur. Plain text autolinks URLs and addresses. Toggle to plain text when HTML is present. Gmail App-password hint in Settings. Opening a letter STOREs `\Seen`. Reader footer: Unread, Flag, Archive, Reply. Files list with Save to Downloads.
 
 **Flags.** Unread (`\Seen`), flag (`\Flagged`), and archive. Archive uses IMAP MOVE when the server allows it, otherwise COPY + `\Deleted` + EXPUNGE. Destination is `\Archive`, a folder named Archive, or Gmail `[Gmail]/All Mail` (`\All`). That folder is listed and stored so archive has somewhere to go; it is not fetched into the feed. Local-only Sent copies (`sent:…`) cannot STORE — sync first. IMAP succeeds, then SQLite.
+
+**Attachments.** MIME parts are cached in SQLite (up to 12 MB each). The reader lists non-inline files; Save writes to Downloads. Compose Attach adds up to eight files (8 MB each) as a mixed MIME payload. Inline `cid:` images are not listed as files; they render in the letter.
 
 **Plain text and summaries.** Subjects, from-names, feed previews, and the plain-text body decode HTML entities (`&nbsp;`, `&#160;`, `&amp;`, …) and strip leftover tags (`<strong>`, `<b>`, `<bold>`, `<em>`, …). Full HTML still renders those tags (nonstandard `<bold>` is treated as `<strong>`). Cleanup runs on display for already-cached mail; **Sync** writes the cleaned preview/body into SQLite.
 
@@ -25,8 +27,6 @@ Living checklist against the product in [`Make Email Great Again.md`](./Make%20E
 These are required before Bateleur is an Outlook-shaped client, not a reader.
 
 - POP ingest on the same SQLite schema
-- Attachments (list, save, compose attach)
-- Inline `cid:` images
 - Optional “load remote images” switch (newsletters currently load https images)
 - IDLE / background sync, sync status in the chrome
 - OAuth / XOAUTH2 for hosts that refuse app passwords

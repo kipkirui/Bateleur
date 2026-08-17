@@ -1,5 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AccountDraft, FlagChange, Mailbox, SendDraft, ServerGuess } from "./types";
+import type {
+  AccountDraft,
+  FlagChange,
+  InlinePart,
+  Mailbox,
+  SendDraft,
+  ServerGuess,
+} from "./types";
 
 function fromParts(
   accounts: Mailbox["accounts"],
@@ -81,4 +88,16 @@ export async function archiveMessage(
   }
   const mailbox = await invoke<Mailbox>("archive_message", { accountId, messageId });
   return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, accountId);
+}
+
+export async function loadInlineParts(messageId: string): Promise<InlinePart[]> {
+  if (!isTauri()) return [];
+  return invoke<InlinePart[]>("inline_parts", { messageId });
+}
+
+export async function saveAttachment(id: string): Promise<string> {
+  if (!isTauri()) {
+    throw new Error("Save needs the desktop app.");
+  }
+  return invoke<string>("save_attachment", { id });
 }

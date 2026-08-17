@@ -28,6 +28,17 @@ export type Message = {
   flagged?: boolean;
   folder: string;
   hero: Hero | null;
+  attachments?: Attachment[];
+};
+
+export type Attachment = {
+  id: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  contentId?: string | null;
+  inline?: boolean;
+  stored?: boolean;
 };
 
 export type Mailbox = {
@@ -73,6 +84,19 @@ export type SendDraft = {
   body: string;
   confirm: boolean;
   html?: string | null;
+  attachments?: DraftAttachment[];
+};
+
+export type DraftAttachment = {
+  filename: string;
+  contentType: string;
+  data: string;
+};
+
+export type InlinePart = {
+  contentId: string;
+  contentType: string;
+  data: string;
 };
 
 export type FlagChange = {

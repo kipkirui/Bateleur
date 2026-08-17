@@ -1,3 +1,4 @@
+mod attach;
 mod db;
 mod imap;
 mod secrets;
@@ -89,7 +90,7 @@ async fn add_account(state: State<'_, AppState>, draft: AccountDraft) -> Result<
         db::upsert_account(&conn, &account)?;
         db::replace_folders(&conn, &account.id, &fetched.folders)?;
         for message in &fetched.messages {
-            db::upsert_message(&conn, message)?;
+            db::persist_message(&conn, message, &fetched.parts)?;
         }
         db::prune_stale_inbox(&conn, &account.id)?;
         if fetched
@@ -99,6 +100,7 @@ async fn add_account(state: State<'_, AppState>, draft: AccountDraft) -> Result<
         {
             db::prune_local_sent(&conn, &account.id)?;
         }
+        db::prune_orphan_attachments(&conn)?;
         db::load_mailbox(&conn)?
     };
     Ok(mailbox)
@@ -123,7 +125,7 @@ async fn sync_account(state: State<'_, AppState>, account_id: String) -> Result<
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::replace_folders(&conn, &account.id, &fetched.folders)?;
         for message in &fetched.messages {
-            db::upsert_message(&conn, message)?;
+            db::persist_message(&conn, message, &fetched.parts)?;
         }
         db::prune_stale_inbox(&conn, &account.id)?;
         if fetched
@@ -133,6 +135,7 @@ async fn sync_account(state: State<'_, AppState>, account_id: String) -> Result<
         {
             db::prune_local_sent(&conn, &account.id)?;
         }
+        db::prune_orphan_attachments(&conn)?;
         db::load_mailbox(&conn)?
     };
     Ok(mailbox)
@@ -153,25 +156,26 @@ async fn send_mail(state: State<'_, AppState>, draft: SendDraft) -> Result<Mailb
     let password = secrets::load_password(&account.address)?;
     let to_send = account.clone();
     let payload = draft.clone();
-    let (mut sent, rfc822) =
+    let (mut sent, rfc822, mut parts) =
         tauri::async_runtime::spawn_blocking(move || smtp::send(&to_send, &password, &payload))
             .await
             .map_err(|e| e.to_string())??;
 
     let password = secrets::load_password(&account.address)?;
     let to_append = account.clone();
-    if let Ok(Some(from_imap)) = tauri::async_runtime::spawn_blocking(move || {
+    if let Ok(Some((from_imap, imap_parts))) = tauri::async_runtime::spawn_blocking(move || {
         imap::append_sent(&to_append, &password, &rfc822)
     })
     .await
     .map_err(|e| e.to_string())?
     {
         sent = from_imap;
+        parts = imap_parts;
     }
 
     let mailbox = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
-        db::upsert_message(&conn, &sent)?;
+        db::persist_message(&conn, &sent, &parts)?;
         db::load_mailbox(&conn)?
     };
     Ok(mailbox)
@@ -243,6 +247,41 @@ async fn archive_message(
     Ok(mailbox)
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InlinePart {
+    content_id: String,
+    content_type: String,
+    data: String,
+}
+
+#[tauri::command]
+fn inline_parts(state: State<AppState>, message_id: String) -> Result<Vec<InlinePart>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let rows = db::inline_parts(&conn, &message_id)?;
+    Ok(rows
+        .into_iter()
+        .map(|(content_id, content_type, bytes)| InlinePart {
+            content_id,
+            content_type,
+            data: base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes),
+        })
+        .collect())
+}
+
+#[tauri::command]
+fn save_attachment(state: State<AppState>, id: String) -> Result<String, String> {
+    let (filename, _content_type, bytes, stored) = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::attachment_bytes(&conn, &id)?
+    };
+    if !stored {
+        return Err("That file was too large to cache. It cannot be saved from this copy.".into());
+    }
+    let path = attach::save_to_downloads(&filename, &bytes)?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 fn remove_account(state: State<AppState>, account_id: String) -> Result<Mailbox, String> {
     let account = {
@@ -275,6 +314,8 @@ pub fn run() {
             send_mail,
             set_flag,
             archive_message,
+            inline_parts,
+            save_attachment,
             remove_account
         ])
         .run(tauri::generate_context!())
