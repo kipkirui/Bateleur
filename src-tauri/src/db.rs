@@ -54,6 +54,12 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
             bytes BLOB NOT NULL
         );
         CREATE INDEX IF NOT EXISTS attachments_message ON attachments(message_id);
+        CREATE TABLE IF NOT EXISTS pop_uidl (
+            account_id TEXT NOT NULL,
+            uidl TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            PRIMARY KEY (account_id, uidl)
+        );
         ",
     )
     .map_err(err)?;
@@ -334,6 +340,8 @@ pub fn remove_account(conn: &Connection, id: &str) -> Result<Account, String> {
         .map_err(err)?;
     conn.execute("DELETE FROM folders WHERE account_id = ?1", [id])
         .map_err(err)?;
+    conn.execute("DELETE FROM pop_uidl WHERE account_id = ?1", [id])
+        .map_err(err)?;
     conn.execute("DELETE FROM accounts WHERE id = ?1", [id])
         .map_err(err)?;
     Ok(account)
@@ -453,11 +461,13 @@ pub fn apply_fetch(
     folders: &[MailFolder],
     messages: &[Message],
     parts: &[StoredPart],
+    pop_uidls: &[(String, String)],
 ) -> Result<Mailbox, String> {
     replace_folders(conn, account_id, folders)?;
     for message in messages {
         persist_message(conn, message, parts)?;
     }
+    remember_pop_uidls(conn, account_id, pop_uidls)?;
     prune_stale_inbox(conn, account_id)?;
     if messages
         .iter()
@@ -467,6 +477,36 @@ pub fn apply_fetch(
     }
     prune_orphan_attachments(conn)?;
     load_mailbox(conn)
+}
+
+pub fn pop_uidls(conn: &Connection, account_id: &str) -> Result<std::collections::HashSet<String>, String> {
+    let mut stmt = conn
+        .prepare("SELECT uidl FROM pop_uidl WHERE account_id = ?1")
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([account_id], |row| row.get::<_, String>(0))
+        .map_err(err)?;
+    let mut out = std::collections::HashSet::new();
+    for row in rows {
+        out.insert(row.map_err(err)?);
+    }
+    Ok(out)
+}
+
+fn remember_pop_uidls(
+    conn: &Connection,
+    account_id: &str,
+    uidls: &[(String, String)],
+) -> Result<(), String> {
+    for (uidl, message_id) in uidls {
+        conn.execute(
+            "INSERT OR REPLACE INTO pop_uidl (account_id, uidl, message_id)
+             VALUES (?1, ?2, ?3)",
+            params![account_id, uidl, message_id],
+        )
+        .map_err(err)?;
+    }
+    Ok(())
 }
 
 fn folder_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MailFolder> {

@@ -20,11 +20,11 @@
 
 You are the editor, not the intern who has to read every raw wire. Invoices and “please reply” land in **Action**. Newsletters and long FYI land in **Reading**. Staff (summaries, drafts) is optional, off until you turn it on, and bring-your-own-key — we do not sell tokens and we do not proxy inference.
 
-This is a universal IMAP client, not a Gmail wrapper. Add any mailbox. Mail stays on your machine.
+This is a universal IMAP/POP client, not a Gmail wrapper. Add any mailbox. Mail stays on your machine.
 
 ## Status
 
-Early (0.6.0). You can add an IMAP mailbox, sync INBOX / Sent / Drafts / Junk, read HTML mail as designed, send through SMTP after a second confirm (a copy is APPENDed to Sent), archive / unread / flag on the server, and open or attach files. Remote images stay off until you load them. The inbox is watched with IMAP IDLE. POP, OAuth, and staff are still open.
+Early (0.7.0). You can add an IMAP or POP mailbox, sync INBOX / Sent / Drafts / Junk (IMAP), read HTML mail as designed, send through SMTP after a second confirm (IMAP APPENDs a copy to Sent), archive / unread / flag, and open or attach files. Remote images stay off until you load them. IMAP inboxes are watched with IDLE; POP is polled. OAuth and staff are still open.
 
 Living checklist: [`STATUS.md`](./STATUS.md).  
 Product thesis: [`Make Email Great Again.md`](./Make%20Email%20Great%20Again.md).
@@ -35,7 +35,7 @@ Released versions: [`CHANGELOG.md`](./CHANGELOG.md).
 - **UI:** React + TypeScript (Vite)
 - **Shell:** Tauri 2 (native webview, not Electron)
 - **Core:** Rust crate `bateleur-core` (shared with a future mobile app)
-- **Mail:** IMAP over rustls, SMTP via lettre, SQLite cache, OS keychain for passwords
+- **Mail:** IMAP and POP over rustls, SMTP via lettre, SQLite cache, OS keychain for passwords
 - **Design:** CSS tokens in `src/styles.css` — cream paper, charcoal, amber
 
 ## Run
@@ -55,11 +55,11 @@ UI only, in a browser (empty mailbox, no IMAP):
 npm run dev
 ```
 
-Add a mailbox from **Settings**. IMAP login is tested immediately; the password goes in Windows Credential Manager / the OS keychain; recent INBOX, Sent, Drafts, and Junk mail is cached in SQLite. Compose / Reply send through that account’s SMTP after a second **Confirm send**, then a copy is APPENDed to Sent on the server.
+Add a mailbox from **Settings**. IMAP or POP login is tested immediately; the password goes in Windows Credential Manager / the OS keychain; recent mail is cached in SQLite. Compose / Reply send through that account’s SMTP after a second **Confirm send**. IMAP then APPENDs a copy to Sent; POP keeps a local Sent copy.
 
 If Sync says there is no password in the OS keychain, add the mailbox again from Settings with the same address — that writes the secret into Credential Manager. Re-adding updates the existing mailbox; it does not duplicate it.
 
-Gmail needs a 16-letter [App password](https://myaccount.google.com/apppasswords) (not the Google account password). Outlook.com usually needs an app password too. Enable IMAP in the provider’s settings first.
+Gmail needs a 16-letter [App password](https://myaccount.google.com/apppasswords) (not the Google account password). Outlook.com usually needs an app password too. Enable IMAP or POP in the provider’s settings first.
 
 If the server certificate is untrusted, tick **Trust this server's certificate** and connect again.
 

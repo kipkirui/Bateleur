@@ -8,6 +8,14 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.7.0] - 2026-08-17
+
+### Added
+
+- POP ingest: last 40 messages into the local inbox (UIDL, leave mail on the server)
+- Unread / flag / archive for POP are local; SMTP send still works (no IMAP APPEND)
+- Background poll every 3 minutes for POP mailboxes
+
 ## [0.6.0] - 2026-08-17
 
 ### Added

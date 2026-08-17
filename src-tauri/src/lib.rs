@@ -1,6 +1,8 @@
 mod attach;
 mod db;
 mod imap;
+mod parse;
+mod pop;
 mod secrets;
 mod smtp;
 mod tls;
@@ -38,14 +40,18 @@ async fn add_account(
     state: State<'_, AppState>,
     draft: AccountDraft,
 ) -> Result<Mailbox, String> {
-    if draft.kind == "pop" {
-        return Err("POP ingest is next. Use IMAP if the host offers it.".into());
+    if draft.kind != "imap" && draft.kind != "pop" {
+        return Err("Choose IMAP or POP.".into());
     }
     if draft.address.trim().is_empty() || draft.password.is_empty() {
         return Err("Address and password are required.".into());
     }
     if draft.imap_host.trim().is_empty() {
-        return Err("IMAP host is required.".into());
+        return Err(if draft.kind == "pop" {
+            "POP host is required.".into()
+        } else {
+            "IMAP host is required.".into()
+        });
     }
 
     let local = draft
@@ -67,7 +73,11 @@ async fn add_account(
         } else {
             draft.label.trim().to_string()
         },
-        kind: "imap".into(),
+        kind: if draft.kind == "pop" {
+            "pop".into()
+        } else {
+            "imap".into()
+        },
         imap_host: Some(draft.imap_host.trim().to_string()),
         imap_port: Some(draft.imap_port),
         imap_user: Some(if draft.imap_user.trim().is_empty() {
@@ -87,9 +97,21 @@ async fn add_account(
 
     let password = draft.password.clone();
     let to_fetch = account.clone();
-    let fetched = tauri::async_runtime::spawn_blocking(move || imap::fetch_account(&to_fetch, &password))
-        .await
-        .map_err(|e| e.to_string())??;
+    let known = if account.kind == "pop" {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::pop_uidls(&conn, &account.id).unwrap_or_default()
+    } else {
+        std::collections::HashSet::new()
+    };
+    let fetched = tauri::async_runtime::spawn_blocking(move || {
+        if to_fetch.kind == "pop" {
+            pop::fetch_account(&to_fetch, &password, &known)
+        } else {
+            imap::fetch_account(&to_fetch, &password)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??;
 
     let stored: String = draft.password.chars().filter(|c| !c.is_whitespace()).collect();
     secrets::save_password(&account.address, &stored)?;
@@ -103,6 +125,7 @@ async fn add_account(
             &fetched.folders,
             &fetched.messages,
             &fetched.parts,
+            &fetched.pop_uidls,
         )?
     };
     watch::start(app, account.id.clone());
@@ -119,8 +142,8 @@ async fn sync_account(
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::get_account(&conn, &account_id)?
     };
-    if account.kind != "imap" {
-        return Err("Only IMAP accounts sync.".into());
+    if account.kind != "imap" && account.kind != "pop" {
+        return Err("Only IMAP and POP accounts sync.".into());
     }
     let _ = app.emit(
         "sync-status",
@@ -133,9 +156,21 @@ async fn sync_account(
     );
     let password = secrets::load_password(&account.address)?;
     let to_fetch = account.clone();
-    let fetched = tauri::async_runtime::spawn_blocking(move || imap::fetch_account(&to_fetch, &password))
-        .await
-        .map_err(|e| e.to_string())??;
+    let known = if account.kind == "pop" {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::pop_uidls(&conn, &account.id).unwrap_or_default()
+    } else {
+        std::collections::HashSet::new()
+    };
+    let fetched = tauri::async_runtime::spawn_blocking(move || {
+        if to_fetch.kind == "pop" {
+            pop::fetch_account(&to_fetch, &password, &known)
+        } else {
+            imap::fetch_account(&to_fetch, &password)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??;
 
     let mailbox = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
@@ -145,6 +180,7 @@ async fn sync_account(
             &fetched.folders,
             &fetched.messages,
             &fetched.parts,
+            &fetched.pop_uidls,
         )?
     };
     let _ = app.emit(
@@ -181,14 +217,16 @@ async fn send_mail(state: State<'_, AppState>, draft: SendDraft) -> Result<Mailb
 
     let password = secrets::load_password(&account.address)?;
     let to_append = account.clone();
-    if let Ok(Some((from_imap, imap_parts))) = tauri::async_runtime::spawn_blocking(move || {
-        imap::append_sent(&to_append, &password, &rfc822)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-    {
-        sent = from_imap;
-        parts = imap_parts;
+    if account.kind == "imap" {
+        if let Ok(Some((from_imap, imap_parts))) = tauri::async_runtime::spawn_blocking(move || {
+            imap::append_sent(&to_append, &password, &rfc822)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        {
+            sent = from_imap;
+            parts = imap_parts;
+        }
     }
 
     let mailbox = {
@@ -208,6 +246,14 @@ async fn set_flag(state: State<'_, AppState>, change: FlagChange) -> Result<Mail
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::get_account(&conn, &change.account_id)?
     };
+    if account.kind == "pop" {
+        let mailbox = {
+            let conn = state.db.lock().map_err(|e| e.to_string())?;
+            db::apply_flag_change(&conn, &change.message_id, change.seen, change.flagged)?;
+            db::load_mailbox(&conn)?
+        };
+        return Ok(mailbox);
+    }
     let (folder_key, uid) = parse_message_ref(&account.id, &change.message_id)?;
     let imap_name = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
@@ -241,6 +287,14 @@ async fn archive_message(
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::get_account(&conn, &account_id)?
     };
+    if account.kind == "pop" {
+        let mailbox = {
+            let conn = state.db.lock().map_err(|e| e.to_string())?;
+            db::delete_message(&conn, &message_id)?;
+            db::load_mailbox(&conn)?
+        };
+        return Ok(mailbox);
+    }
     let (folder_key, uid) = parse_message_ref(&account.id, &message_id)?;
     let (source_imap, dest_imap) = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;

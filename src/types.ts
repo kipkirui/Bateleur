@@ -58,6 +58,8 @@ export type MailFolder = {
 export type ServerGuess = {
   imapHost: string;
   imapPort: number;
+  popHost: string;
+  popPort: number;
   smtpHost: string;
   smtpPort: number;
   username: string;

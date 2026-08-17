@@ -34,7 +34,7 @@ npm run tauri dev
 | Path | Role |
 | --- | --- |
 | `src/` | React UI |
-| `src-tauri/` | Tauri shell, IMAP, SMTP, SQLite, keychain |
+| `src-tauri/` | Tauri shell, IMAP, POP, SMTP, SQLite, keychain |
 | `crates/bateleur-core/` | Shared types and text helpers (desktop + future mobile) |
 | `src/styles.css` | Design tokens |
 

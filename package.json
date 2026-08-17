@@ -1,10 +1,10 @@
 {
   "name": "bateleur",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "license": "MIT",
   "author": "Kipkirui",
-  "description": "Local-first desktop mail client. Magazine feed, any IMAP mailbox, optional BYOK staff.",
+  "description": "Local-first desktop mail client. Magazine feed, any IMAP or POP mailbox, optional BYOK staff.",
   "repository": {
     "type": "git",
     "url": "https://github.com/kipkirui/Bateleur.git"

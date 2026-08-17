@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { guessServers } from "../api";
 import { SecretField } from "./SecretField";
 import { ConfirmModal } from "./ConfirmModal";
-import type { Account, AccountDraft } from "../types";
+import type { Account, AccountDraft, ServerGuess } from "../types";
 
 type Props = {
   accounts: Account[];
@@ -41,23 +41,43 @@ export function Settings({
   const [smtpUser, setSmtpUser] = useState("");
   const [trustTls, setTrustTls] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<Account | null>(null);
+  const [guess, setGuess] = useState<ServerGuess | null>(null);
 
   useEffect(() => {
     const trimmed = address.trim();
     if (!trimmed.includes("@")) return;
     const handle = window.setTimeout(() => {
-      guessServers(trimmed).then((guess) => {
-        if (!guess) return;
-        setImapHost(guess.imapHost);
-        setImapPort(guess.imapPort);
-        setImapUser(guess.username);
-        setSmtpHost(guess.smtpHost);
-        setSmtpPort(guess.smtpPort);
-        setSmtpUser(guess.username);
+      guessServers(trimmed).then((next) => {
+        if (!next) return;
+        setGuess(next);
       });
     }, 280);
     return () => window.clearTimeout(handle);
   }, [address]);
+
+  useEffect(() => {
+    if (!guess) return;
+    if (kind === "pop") {
+      setImapHost(guess.popHost);
+      setImapPort(guess.popPort);
+    } else {
+      setImapHost(guess.imapHost);
+      setImapPort(guess.imapPort);
+    }
+    setImapUser(guess.username);
+    setSmtpHost(guess.smtpHost);
+    setSmtpPort(guess.smtpPort);
+    setSmtpUser(guess.username);
+  }, [guess, kind]);
+
+  useEffect(() => {
+    if (guess) return;
+    setImapPort((port) => {
+      if (kind === "pop" && port === 993) return 995;
+      if (kind === "imap" && port === 995) return 993;
+      return port;
+    });
+  }, [kind, guess]);
 
   useEffect(() => {
     if (error && /unknownissuer|certificate|tls/i.test(error)) {
@@ -78,9 +98,10 @@ export function Settings({
         <section className="settings-section">
           <h2>Mail</h2>
           <p>
-            Add any IMAP mailbox, like a desktop client. Password is stored in
-            the OS keychain, never in SQLite. Gmail and Outlook need an app
-            password.
+            Add any IMAP or POP mailbox, like a desktop client. Password is
+            stored in the OS keychain, never in SQLite. Gmail and Outlook need
+            an app password. POP has no server folders — mail is ingested into
+            the local inbox and left on the server.
           </p>
           <label className="check">
             <input
@@ -100,7 +121,7 @@ export function Settings({
                   <div>
                     <strong>{account.label}</strong>
                     <span className="nav-meta">
-                      IMAP · {account.address}
+                      {account.kind === "pop" ? "POP" : "IMAP"} · {account.address}
                     </span>
                   </div>
                   <div className="account-actions">
@@ -166,8 +187,8 @@ export function Settings({
               <p className="muted">
                 Gmail will reject your normal Google password. Create a 16-letter
                 App password at myaccount.google.com/apppasswords (2-Step
-                Verification must be on), and enable IMAP in Gmail settings.
-                Spaces in the app password are fine.
+                Verification must be on), and enable {kind === "pop" ? "POP" : "IMAP"}{" "}
+                in Gmail settings. Spaces in the app password are fine.
               </p>
             ) : null}
             <label>
@@ -185,13 +206,13 @@ export function Settings({
                 onChange={(e) => setKind(e.target.value as "imap" | "pop")}
               >
                 <option value="imap">IMAP</option>
-                <option value="pop">POP (next)</option>
+                <option value="pop">POP</option>
               </select>
             </label>
             <h3>Servers</h3>
             <div className="server-grid">
               <label>
-                IMAP host
+                {kind === "pop" ? "POP host" : "IMAP host"}
                 <input
                   value={imapHost}
                   onChange={(e) => setImapHost(e.target.value)}
@@ -206,7 +227,7 @@ export function Settings({
                 />
               </label>
               <label>
-                IMAP username
+                {kind === "pop" ? "POP username" : "IMAP username"}
                 <input
                   value={imapUser}
                   onChange={(e) => setImapUser(e.target.value)}

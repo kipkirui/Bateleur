@@ -84,7 +84,9 @@ export function Rail({
           onClick={() => onAccount(account.id)}
         >
           <span>{account.label}</span>
-          <span className="nav-meta">IMAP · {account.address}</span>
+          <span className="nav-meta">
+            {account.kind === "pop" ? "POP" : "IMAP"} · {account.address}
+          </span>
         </button>
       ))}
 

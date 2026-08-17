@@ -31,7 +31,7 @@ pub fn boot(app: AppHandle) {
         db::list_accounts(&conn).unwrap_or_default()
     };
     for account in accounts {
-        if account.kind == "imap" {
+        if account.kind == "imap" || account.kind == "pop" {
             start(app.clone(), account.id);
         }
     }
@@ -94,7 +94,7 @@ fn watch_loop(app: AppHandle, account_id: String, stop: Arc<AtomicBool>) {
             }
         }
         emit(&app, &account_id, "watching", Some(now()), None);
-        let waited = wait_for_change(&app, &account_id);
+        let waited = wait_for_change(&app, &account_id, &stop);
         if stop.load(Ordering::SeqCst) {
             break;
         }
@@ -107,15 +107,34 @@ fn watch_loop(app: AppHandle, account_id: String, stop: Arc<AtomicBool>) {
     }
 }
 
-fn wait_for_change(app: &AppHandle, account_id: &str) -> Result<(), String> {
+fn wait_for_change(app: &AppHandle, account_id: &str, stop: &AtomicBool) -> Result<(), String> {
     let (account, password) = credentials(app, account_id)?;
+    if account.kind == "pop" {
+        let _ = sleep_or_stop(stop, POLL_FALLBACK);
+        return Ok(());
+    }
     imap::wait_inbox(&account, &password, IDLE_WAIT)
 }
 
 fn refresh_account(app: &AppHandle, account_id: &str) -> Result<Mailbox, String> {
-    let (account, password) = credentials(app, account_id)?;
+    let (account, password, known) = {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        let account = db::get_account(&conn, account_id)?;
+        let known = if account.kind == "pop" {
+            db::pop_uidls(&conn, &account.id)?
+        } else {
+            std::collections::HashSet::new()
+        };
+        let password = secrets::load_password(&account.address)?;
+        (account, password, known)
+    };
     let to_fetch = account.clone();
-    let fetched = imap::fetch_account(&to_fetch, &password)?;
+    let fetched = if to_fetch.kind == "pop" {
+        crate::pop::fetch_account(&to_fetch, &password, &known)?
+    } else {
+        imap::fetch_account(&to_fetch, &password)?
+    };
     let state = app.state::<AppState>();
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     db::apply_fetch(
@@ -124,6 +143,7 @@ fn refresh_account(app: &AppHandle, account_id: &str) -> Result<Mailbox, String>
         &fetched.folders,
         &fetched.messages,
         &fetched.parts,
+        &fetched.pop_uidls,
     )
 }
 
@@ -136,8 +156,8 @@ fn credentials(
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::get_account(&conn, account_id)?
     };
-    if account.kind != "imap" {
-        return Err("Only IMAP accounts watch.".into());
+    if account.kind != "imap" && account.kind != "pop" {
+        return Err("Only IMAP and POP accounts watch.".into());
     }
     let password = secrets::load_password(&account.address)?;
     Ok((account, password))

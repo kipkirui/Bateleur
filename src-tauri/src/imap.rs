@@ -1,11 +1,8 @@
-use bateleur_core::{
-    classify_feed, classify_imap_folder, html_to_plain, preview_text, Account, Hero, MailFolder,
-    Message,
-};
-use crate::attach::{self, StoredPart};
+use crate::attach::StoredPart;
+use crate::parse::{self, FetchResult};
+use bateleur_core::{classify_imap_folder, Account, MailFolder, Message};
 use imap::extensions::idle::SetReadTimeout;
 use imap::types::{Flag, NameAttribute};
-use mail_parser::{MessageParser, PartType};
 use rustls::pki_types::ServerName;
 use rustls::{ClientConnection, StreamOwned};
 use std::io::{self, Read, Write};
@@ -42,12 +39,6 @@ impl SetReadTimeout for ImapTls {
             .set_read_timeout(timeout)
             .map_err(imap::Error::Io)
     }
-}
-
-pub struct FetchResult {
-    pub messages: Vec<Message>,
-    pub folders: Vec<MailFolder>,
-    pub parts: Vec<StoredPart>,
 }
 
 pub fn fetch_account(account: &Account, password: &str) -> Result<FetchResult, String> {
@@ -88,6 +79,7 @@ pub fn fetch_account(account: &Account, password: &str) -> Result<FetchResult, S
         messages,
         folders,
         parts,
+        pop_uidls: Vec::new(),
     })
 }
 
@@ -309,54 +301,20 @@ fn fetch_named(
         let Some(raw) = fetch.body() else {
             continue;
         };
-        let Some(parsed) = MessageParser::default().parse(raw) else {
-            continue;
-        };
         let unread = !fetch.flags().iter().any(|flag| matches!(flag, Flag::Seen));
         let flagged = fetch
             .flags()
             .iter()
             .any(|flag| matches!(flag, Flag::Flagged));
-        let (from_name, from_email) = from_parts(&parsed);
-        let subject = html_to_plain(parsed.subject().unwrap_or("(no subject)"));
-        let (body, html_body) = bodies(&parsed);
-        let preview = preview_text(&body, 180);
-        let feed = classify_feed(&subject, &preview, &from_email).to_string();
-        let domain = from_email.split('@').nth(1).unwrap_or("mail");
-        let hero = if feed == "reading" && folder.canonical == "inbox" {
-            Some(Hero {
-                label: domain.to_string(),
-                tone: "paper".into(),
-            })
-        } else {
-            None
-        };
         let folder_id = message_folder(&folder.canonical, &folder.imap_name);
         let id = format!("{}:{folder_id}:{uid}", account.id);
-        let extracted = attach::extract(&parsed, &id);
-        let attachments = extracted.iter().map(|p| p.meta.clone()).collect();
+        let Some((message, extracted)) =
+            parse::from_rfc822(&account.id, &folder_id, &id, raw, unread, flagged)
+        else {
+            continue;
+        };
         parts.extend(extracted);
-        out.push(Message {
-            id,
-            account_id: account.id.clone(),
-            feed,
-            from_name,
-            from_email,
-            subject,
-            preview,
-            body,
-            html_body,
-            received_at: parsed
-                .date()
-                .map(|d| d.to_rfc3339())
-                .unwrap_or_else(|| chrono_fallback()),
-            unread,
-            waiting_on: false,
-            flagged,
-            folder: folder_id,
-            hero,
-            attachments,
-        });
+        out.push(message);
     }
     Ok((out, parts))
 }
@@ -432,11 +390,11 @@ fn connect_tls(
     Ok(client)
 }
 
-fn compact_secret(secret: &str) -> String {
+pub(crate) fn compact_secret(secret: &str) -> String {
     secret.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
-fn is_gmail(account: &Account) -> bool {
+pub(crate) fn is_gmail(account: &Account) -> bool {
     let host = account.imap_host.as_deref().unwrap_or_default();
     let address = account.address.as_str();
     host.contains("gmail")
@@ -444,91 +402,9 @@ fn is_gmail(account: &Account) -> bool {
         || address.ends_with("@googlemail.com")
 }
 
-fn looks_like_google_app_password(secret: &str) -> bool {
+pub(crate) fn looks_like_google_app_password(secret: &str) -> bool {
     let compact = compact_secret(secret);
     compact.len() == 16 && compact.chars().all(|c| c.is_ascii_alphabetic())
-}
-
-fn from_parts(parsed: &mail_parser::Message<'_>) -> (String, String) {
-    let Some(from) = parsed.from() else {
-        return ("Unknown".into(), String::new());
-    };
-    let Some(addr) = from.first() else {
-        return ("Unknown".into(), String::new());
-    };
-    let email = addr.address().unwrap_or_default().to_string();
-    let name = addr
-        .name()
-        .map(|n| html_to_plain(&n.to_string()))
-        .filter(|n| !n.is_empty())
-        .unwrap_or_else(|| email.clone());
-    (name, email)
-}
-
-fn bodies(parsed: &mail_parser::Message<'_>) -> (String, Option<String>) {
-    let html = first_html_part(parsed);
-    let text = first_plain_part(parsed)
-        .map(|t| strip_css_noise(&html_to_plain(&t)))
-        .filter(|t| !t.is_empty())
-        .or_else(|| html.as_deref().map(|h| strip_css_noise(&html_to_plain(h))))
-        .unwrap_or_default();
-    (text, html)
-}
-
-fn first_html_part(parsed: &mail_parser::Message<'_>) -> Option<String> {
-    for part in &parsed.parts {
-        if let PartType::Html(html) = &part.body {
-            let value = html.as_ref();
-            if value.contains('<') {
-                return Some(value.to_string());
-            }
-        }
-    }
-    None
-}
-
-fn first_plain_part(parsed: &mail_parser::Message<'_>) -> Option<String> {
-    for part in &parsed.parts {
-        if let PartType::Text(text) = &part.body {
-            let value = text.as_ref();
-            if !value.trim().is_empty() && !value.to_ascii_lowercase().contains("<html") {
-                return Some(value.to_string());
-            }
-        }
-    }
-    None
-}
-
-fn strip_css_noise(text: &str) -> String {
-    let mut kept = Vec::new();
-    for line in text.lines() {
-        let t = line.trim();
-        if t.is_empty() {
-            continue;
-        }
-        if t.starts_with(':')
-            || t.starts_with('@')
-            || t.starts_with("/*")
-            || t.contains("color-scheme")
-            || t.contains("supported-color-schemes")
-            || t.contains("mix-blend-mode")
-            || t.contains("font-face")
-            || (t.contains('{') && t.contains('}') && t.contains(':'))
-        {
-            continue;
-        }
-        kept.push(t);
-    }
-    kept.join(" ")
-}
-
-fn chrono_fallback() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    format!("{secs}")
 }
 
 fn friendly<E: std::fmt::Display>(e: E) -> String {
