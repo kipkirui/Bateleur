@@ -22,7 +22,14 @@ function fromParts(
   return { accounts, messages, folders: folders ?? [], waiting };
 }
 
-function isTauri(): boolean {
+export function hydrateMailbox(
+  mailbox: Mailbox,
+  accountId: string | null,
+): Mailbox {
+  return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, accountId);
+}
+
+export function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 

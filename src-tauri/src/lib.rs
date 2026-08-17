@@ -4,16 +4,21 @@ mod imap;
 mod secrets;
 mod smtp;
 mod tls;
+mod watch;
 
 use bateleur_core::{
     guess_servers, parse_message_ref, Account, AccountDraft, FlagChange, Mailbox, SendDraft,
     ServerGuess,
 };
+use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::sync::Mutex;
-use tauri::{Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
-struct AppState {
-    db: Mutex<rusqlite::Connection>,
+pub(crate) struct AppState {
+    pub db: Mutex<rusqlite::Connection>,
+    pub stops: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
 #[tauri::command]
@@ -28,7 +33,11 @@ fn guess_account_servers(address: String) -> Option<ServerGuess> {
 }
 
 #[tauri::command]
-async fn add_account(state: State<'_, AppState>, draft: AccountDraft) -> Result<Mailbox, String> {
+async fn add_account(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    draft: AccountDraft,
+) -> Result<Mailbox, String> {
     if draft.kind == "pop" {
         return Err("POP ingest is next. Use IMAP if the host offers it.".into());
     }
@@ -88,26 +97,24 @@ async fn add_account(state: State<'_, AppState>, draft: AccountDraft) -> Result<
     let mailbox = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::upsert_account(&conn, &account)?;
-        db::replace_folders(&conn, &account.id, &fetched.folders)?;
-        for message in &fetched.messages {
-            db::persist_message(&conn, message, &fetched.parts)?;
-        }
-        db::prune_stale_inbox(&conn, &account.id)?;
-        if fetched
-            .messages
-            .iter()
-            .any(|m| m.folder == "sent" && m.id.contains(":sent:"))
-        {
-            db::prune_local_sent(&conn, &account.id)?;
-        }
-        db::prune_orphan_attachments(&conn)?;
-        db::load_mailbox(&conn)?
+        db::apply_fetch(
+            &conn,
+            &account.id,
+            &fetched.folders,
+            &fetched.messages,
+            &fetched.parts,
+        )?
     };
+    watch::start(app, account.id.clone());
     Ok(mailbox)
 }
 
 #[tauri::command]
-async fn sync_account(state: State<'_, AppState>, account_id: String) -> Result<Mailbox, String> {
+async fn sync_account(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    account_id: String,
+) -> Result<Mailbox, String> {
     let account = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::get_account(&conn, &account_id)?
@@ -115,6 +122,15 @@ async fn sync_account(state: State<'_, AppState>, account_id: String) -> Result<
     if account.kind != "imap" {
         return Err("Only IMAP accounts sync.".into());
     }
+    let _ = app.emit(
+        "sync-status",
+        watch::SyncEvent {
+            account_id: account_id.clone(),
+            state: "syncing".into(),
+            at: None,
+            message: None,
+        },
+    );
     let password = secrets::load_password(&account.address)?;
     let to_fetch = account.clone();
     let fetched = tauri::async_runtime::spawn_blocking(move || imap::fetch_account(&to_fetch, &password))
@@ -123,21 +139,23 @@ async fn sync_account(state: State<'_, AppState>, account_id: String) -> Result<
 
     let mailbox = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
-        db::replace_folders(&conn, &account.id, &fetched.folders)?;
-        for message in &fetched.messages {
-            db::persist_message(&conn, message, &fetched.parts)?;
-        }
-        db::prune_stale_inbox(&conn, &account.id)?;
-        if fetched
-            .messages
-            .iter()
-            .any(|m| m.folder == "sent" && m.id.contains(":sent:"))
-        {
-            db::prune_local_sent(&conn, &account.id)?;
-        }
-        db::prune_orphan_attachments(&conn)?;
-        db::load_mailbox(&conn)?
+        db::apply_fetch(
+            &conn,
+            &account.id,
+            &fetched.folders,
+            &fetched.messages,
+            &fetched.parts,
+        )?
     };
+    let _ = app.emit(
+        "sync-status",
+        watch::SyncEvent {
+            account_id: account_id.clone(),
+            state: "idle".into(),
+            at: Some(chrono::Utc::now().to_rfc3339()),
+            message: None,
+        },
+    );
     Ok(mailbox)
 }
 
@@ -283,7 +301,12 @@ fn save_attachment(state: State<AppState>, id: String) -> Result<String, String>
 }
 
 #[tauri::command]
-fn remove_account(state: State<AppState>, account_id: String) -> Result<Mailbox, String> {
+fn remove_account(
+    app: AppHandle,
+    state: State<AppState>,
+    account_id: String,
+) -> Result<Mailbox, String> {
+    watch::stop(&app, &account_id);
     let account = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::remove_account(&conn, &account_id)?
@@ -303,7 +326,9 @@ pub fn run() {
             let conn = db::open(&dir.join("bateleur.db"))?;
             app.manage(AppState {
                 db: Mutex::new(conn),
+                stops: Mutex::new(HashMap::new()),
             });
+            watch::boot(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

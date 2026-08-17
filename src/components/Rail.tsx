@@ -17,6 +17,7 @@ type Props = {
   onSettings: () => void;
   theme: "day" | "night";
   onTheme: () => void;
+  syncLabel: string;
 };
 
 const FEEDS: { id: FeedId; label: string }[] = [
@@ -44,6 +45,7 @@ export function Rail({
   onSettings,
   theme,
   onTheme,
+  syncLabel,
 }: Props) {
   return (
     <aside className="rail">
@@ -58,6 +60,7 @@ export function Rail({
           />
         </div>
         <div className="waiting">{waiting} waiting</div>
+        {syncLabel ? <div className="sync-status">{syncLabel}</div> : null}
       </div>
 
       <button className="compose" type="button" onClick={onCompose}>

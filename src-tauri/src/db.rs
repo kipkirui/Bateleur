@@ -429,6 +429,46 @@ pub fn get_account_by_address(conn: &Connection, address: &str) -> Result<Option
     }
 }
 
+pub fn list_accounts(conn: &Connection) -> Result<Vec<Account>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, address, label, kind, imap_host, imap_port, imap_user,
+                    smtp_host, smtp_port, smtp_user, trust_tls
+             FROM accounts ORDER BY label",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([], |row| account_from_row(row))
+        .map_err(err)?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row.map_err(err)?);
+    }
+    Ok(out)
+}
+
+pub fn apply_fetch(
+    conn: &Connection,
+    account_id: &str,
+    folders: &[MailFolder],
+    messages: &[Message],
+    parts: &[StoredPart],
+) -> Result<Mailbox, String> {
+    replace_folders(conn, account_id, folders)?;
+    for message in messages {
+        persist_message(conn, message, parts)?;
+    }
+    prune_stale_inbox(conn, account_id)?;
+    if messages
+        .iter()
+        .any(|m| m.folder == "sent" && m.id.contains(":sent:"))
+    {
+        prune_local_sent(conn, account_id)?;
+    }
+    prune_orphan_attachments(conn)?;
+    load_mailbox(conn)
+}
+
 fn folder_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MailFolder> {
     Ok(MailFolder {
         account_id: row.get(0)?,

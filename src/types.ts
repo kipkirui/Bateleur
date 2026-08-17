@@ -114,3 +114,9 @@ export type FeedId =
   | "junk"
   | `custom:${string}`;
 export type ReaderMode = "magazine" | "raw";
+export type SyncStatus = {
+  accountId: string;
+  state: "idle" | "syncing" | "watching" | "error" | string;
+  at?: string | null;
+  message?: string | null;
+};

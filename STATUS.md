@@ -8,7 +8,7 @@ Living checklist against the product in [`Make Email Great Again.md`](./Make%20E
 
 **Accounts.** Any IMAP mailbox via Settings → Mail. Autoconfig guesses hosts for Gmail, Outlook, Fastmail, Yahoo, iCloud. Manual host / port / username. TLS via rustls (Mozilla roots + OS store), with an explicit “trust this certificate” override. Password lives in the OS keychain (`bateleur.imap` / sanitized address), never SQLite. Save requires a persistent platform store (Windows Credential Manager / macOS Keychain / Secret Service) and round-trips through a *new* keyring entry so an in-memory mock cannot look like success. Re-adding the same address updates that mailbox instead of duplicating it. If Sync reports no password, add the mailbox again from Settings so the secret is written to the real store.
 
-**Sync.** IMAP LIST of folders, then fetch: last 40 INBOX, 30 each of Sent / Drafts / Junk, and up to eight custom folders (15 each). MIME parse (`mail-parser`), Action vs Reading classify (local heuristics: 2FA, invoices, “please reply”, etc.), SQLite cache (`bateleur.db` in app data). Unified inbox or per-account. Sync reuses the keychain password.
+**Sync.** IMAP LIST of folders, then fetch: last 40 INBOX, 30 each of Sent / Drafts / Junk, and up to eight custom folders (15 each). MIME parse (`mail-parser`), Action vs Reading classify (local heuristics: 2FA, invoices, “please reply”, etc.), SQLite cache (`bateleur.db` in app data). Unified inbox or per-account. Sync reuses the keychain password. After connect, a background thread IDLEs INBOX (RFC 2177) and refetches on change or every 8 minutes; if the server refuses IDLE, it polls every 3 minutes. The rail shows Syncing / Synced / Watching / Sync failed. Settings → Sync still forces a fetch.
 
 **Send.** Confirm-gated SMTP via `lettre` (STARTTLS on 587, implicit TLS on 465). Compose / Reply / mailto: pick a From mailbox, then **Send** then **Confirm send**. The same OS-keychain password is used. After SMTP succeeds we IMAP APPEND the RFC822 to the account’s Sent folder (`\Seen`). If APPEND fails, a local Sent copy is still stored. Gmail/Outlook still need an app password. Empty body or a missing To address is refused.
 
@@ -27,7 +27,6 @@ Living checklist against the product in [`Make Email Great Again.md`](./Make%20E
 These are required before Bateleur is an Outlook-shaped client, not a reader.
 
 - POP ingest on the same SQLite schema
-- IDLE / background sync, sync status in the chrome
 - OAuth / XOAUTH2 for hosts that refuse app passwords
 - Second-account proof is already possible; keep unified vs per-account as the user’s choice
 

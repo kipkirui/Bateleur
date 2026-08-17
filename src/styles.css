@@ -132,6 +132,13 @@ kbd {
   padding-left: calc(var(--brand-mark) + var(--brand-gap));
 }
 
+.sync-status {
+  color: var(--ink-soft);
+  font-size: 11px;
+  margin: 4px 0 0;
+  padding-left: calc(var(--brand-mark) + var(--brand-gap));
+}
+
 .compose {
   display: flex;
   justify-content: space-between;

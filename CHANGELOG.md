@@ -8,6 +8,13 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.6.0] - 2026-08-17
+
+### Added
+
+- IMAP IDLE on INBOX (8-minute keepalive) with a 3-minute poll fallback if IDLE is refused
+- Background fetch on launch; rail shows Syncing / Synced / Watching / Sync failed
+
 ## [0.5.0] - 2026-08-17
 
 ### Added

@@ -3,16 +3,46 @@ use bateleur_core::{
     Message,
 };
 use crate::attach::{self, StoredPart};
+use imap::extensions::idle::SetReadTimeout;
 use imap::types::{Flag, NameAttribute};
 use mail_parser::{MessageParser, PartType};
 use rustls::pki_types::ServerName;
 use rustls::{ClientConnection, StreamOwned};
+use std::io::{self, Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::Duration;
 
 type TlsStream = StreamOwned<ClientConnection, TcpStream>;
-type Session = imap::Session<TlsStream>;
+type Session = imap::Session<ImapTls>;
+
+struct ImapTls {
+    inner: TlsStream,
+}
+
+impl Read for ImapTls {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buf)
+    }
+}
+
+impl Write for ImapTls {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.inner.write(buf)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+impl SetReadTimeout for ImapTls {
+    fn set_read_timeout(&mut self, timeout: Option<Duration>) -> imap::error::Result<()> {
+        self.inner
+            .get_ref()
+            .set_read_timeout(timeout)
+            .map_err(imap::Error::Io)
+    }
+}
 
 pub struct FetchResult {
     pub messages: Vec<Message>,
@@ -83,6 +113,18 @@ pub fn append_sent(
     let fetched = fetch_named(&mut session, account, &sent, 1).ok();
     let _ = session.logout();
     Ok(fetched.and_then(|(mut batch, parts)| batch.pop().map(|message| (message, parts))))
+}
+
+pub fn wait_inbox(account: &Account, password: &str, timeout: Duration) -> Result<(), String> {
+    let mut session = login(account, password)?;
+    session.select("INBOX").map_err(friendly)?;
+    let waited = {
+        let mut handle = session.idle().map_err(friendly)?;
+        handle.set_keepalive(timeout);
+        handle.wait_with_timeout(timeout).map_err(friendly)
+    };
+    let _ = session.logout();
+    waited.map(|_| ())
 }
 
 pub fn set_flags(
@@ -372,7 +414,7 @@ fn connect_tls(
     host: &str,
     port: u16,
     trust_anyway: bool,
-) -> Result<imap::Client<StreamOwned<ClientConnection, TcpStream>>, String> {
+) -> Result<imap::Client<ImapTls>, String> {
     let config = crate::tls::client_config(trust_anyway)?;
     let name = ServerName::try_from(host.to_string())
         .map_err(|_| format!("Invalid IMAP host: {host}"))?;
@@ -383,7 +425,9 @@ fn connect_tls(
         .map_err(|e| e.to_string())?;
     tcp.set_write_timeout(Some(Duration::from_secs(30)))
         .map_err(|e| e.to_string())?;
-    let mut client = imap::Client::new(StreamOwned::new(conn, tcp));
+    let mut client = imap::Client::new(ImapTls {
+        inner: StreamOwned::new(conn, tcp),
+    });
     client.read_greeting().map_err(friendly)?;
     Ok(client)
 }

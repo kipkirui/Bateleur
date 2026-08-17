@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addAccount, archiveMessage, loadMailbox, removeAccount, sendMail, setFlag, syncAccount } from "./api";
+import { listen } from "@tauri-apps/api/event";
+import { addAccount, archiveMessage, hydrateMailbox, isTauri, loadMailbox, removeAccount, sendMail, setFlag, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -9,7 +10,7 @@ import { Rail } from "./components/Rail";
 import { Reader } from "./components/Reader";
 import { Settings } from "./components/Settings";
 import { StaffModal } from "./components/StaffModal";
-import type { AccountDraft, DraftAttachment, FeedId, Mailbox, Message, ReaderMode } from "./types";
+import type { AccountDraft, DraftAttachment, FeedId, Mailbox, Message, ReaderMode, SyncStatus } from "./types";
 import type { MailTo } from "./lib/links";
 import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
 import "./styles.css";
@@ -46,8 +47,11 @@ export default function App() {
   const [accountError, setAccountError] = useState<string | null>(null);
   const [accountBusy, setAccountBusy] = useState(false);
   const [settingsNonce, setSettingsNonce] = useState(0);
+  const [syncByAccount, setSyncByAccount] = useState<Record<string, SyncStatus>>({});
   const searchRef = useRef<HTMLInputElement>(null);
   const seenOnOpen = useRef<string | null>(null);
+  const accountIdRef = useRef(accountId);
+  accountIdRef.current = accountId;
 
   const refresh = useCallback((accountFilter: string | null) => {
     return loadMailbox(accountFilter).then(setMailbox);
@@ -62,6 +66,33 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    let unlistenStatus: (() => void) | undefined;
+    let unlistenMail: (() => void) | undefined;
+    void listen<SyncStatus>("sync-status", (event) => {
+      setSyncByAccount((prev) => ({
+        ...prev,
+        [event.payload.accountId]: event.payload,
+      }));
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlistenStatus = fn;
+    });
+    void listen<Mailbox>("mailbox-updated", (event) => {
+      setMailbox(hydrateMailbox(event.payload, accountIdRef.current));
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlistenMail = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlistenStatus?.();
+      unlistenMail?.();
+    };
+  }, []);
 
   const messages = mailbox?.messages ?? [];
   const accounts = mailbox?.accounts ?? [];
@@ -320,6 +351,7 @@ export default function App() {
         feed={feed}
         onFeed={setFeed}
         waiting={waitingFor(messages, accountId)}
+        syncLabel={syncLabel(syncByAccount, accountId)}
         folders={mailbox?.folders ?? []}
         mode={mode}
         onMode={setMode}
@@ -419,6 +451,35 @@ export default function App() {
       {toast ? <div className="toast">{toast}</div> : null}
     </div>
   );
+}
+
+function syncLabel(
+  byAccount: Record<string, SyncStatus>,
+  accountId: string | null,
+): string {
+  const rows = accountId
+    ? [byAccount[accountId]].filter(Boolean)
+    : Object.values(byAccount);
+  if (rows.some((row) => row.state === "syncing")) return "Syncing";
+  if (rows.some((row) => row.state === "error")) return "Sync failed";
+  if (rows.some((row) => row.state === "watching")) return "Watching";
+  const times = rows
+    .map((row) => row.at)
+    .filter((at): at is string => Boolean(at))
+    .sort();
+  const stamped = times[times.length - 1];
+  if (stamped) return `Synced ${formatAgo(stamped)}`;
+  return "";
+}
+
+function formatAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 20_000) return "just now";
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
 }
 
 function escapeHtml(value: string): string {
