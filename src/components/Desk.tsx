@@ -14,6 +14,7 @@ type Props = {
   summarize: boolean;
   summarizeAccount: boolean;
   drafts: boolean;
+  triage?: boolean;
   next?: Message | null;
   onOpenNext?: () => void;
   onReplyNext?: () => void;
@@ -31,6 +32,7 @@ export function Desk({
   summarize,
   summarizeAccount,
   drafts,
+  triage = false,
   next = null,
   onOpenNext,
   onReplyNext,
@@ -51,7 +53,7 @@ export function Desk({
   }
 
   const copy = hired
-    ? deskCopy(summarize, summarizeAccount, drafts, Boolean(next))
+    ? deskCopy(summarize, summarizeAccount, drafts, triage, Boolean(next))
     : "Summaries and drafts stay off until you paste a key. Mail still works without staff. The desk never sends.";
 
   async function writeDraft() {
@@ -126,10 +128,14 @@ function deskCopy(
   summarize: boolean,
   summarizeAccount: boolean,
   drafts: boolean,
+  triage: boolean,
   hasNext: boolean,
 ): string {
   if (hasNext) {
     return "One letter at a time. The desk never sends.";
+  }
+  if (triage) {
+    return "Triage decides front page vs back page from the reader. Local rules still catch codes. The desk never sends.";
   }
   if (summarizeAccount) {
     return "The Brief is a deck of unread Action. Write it from here or the feed. The desk never sends.";

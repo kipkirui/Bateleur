@@ -60,6 +60,8 @@ export default function App() {
     summarizeAccount: false,
     summarizeNew: false,
     drafts: false,
+    triage: false,
+    triageNew: false,
   });
   const [brief, setBrief] = useState<StaffBrief | null>(null);
   const [briefBusy, setBriefBusy] = useState(false);
@@ -1171,6 +1173,7 @@ export default function App() {
         summarize={staff.summarize}
         summarizeAccount={staff.summarizeAccount}
         drafts={staff.drafts}
+        triage={staff.triage}
         next={staff.hired ? nextAction : null}
         onOpenNext={() => {
           if (!nextAction) return;
@@ -1207,6 +1210,9 @@ export default function App() {
           staff={staff}
           onHire={() => setOverlay("staff")}
           onDraft={(body) => openCompose(selected, body)}
+          onTriaged={() => {
+            void refresh(accountId);
+          }}
           storyOverrides={storyOverrides}
         />
       ) : null}

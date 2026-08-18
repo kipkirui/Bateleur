@@ -662,6 +662,25 @@ async fn draft_reply(
 }
 
 #[tauri::command]
+async fn triage_mail(
+    state: State<'_, AppState>,
+    message_id: String,
+) -> Result<staff::StaffTriage, String> {
+    let (runtime, message) = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        staff::prepare_triage(&conn, &message_id)?
+    };
+    let triage = tauri::async_runtime::spawn_blocking(move || staff::decide_triage(&runtime, &message))
+        .await
+        .map_err(|e| e.to_string())??;
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        staff::store_triage(&conn, &message_id, &triage)?;
+    }
+    Ok(triage)
+}
+
+#[tauri::command]
 fn staff_brief(
     state: State<AppState>,
     account_id: Option<String>,
@@ -772,6 +791,7 @@ pub fn run() {
             staff_letter,
             summarize_mail,
             draft_reply,
+            triage_mail,
             staff_brief,
             summarize_account,
             story_overrides,

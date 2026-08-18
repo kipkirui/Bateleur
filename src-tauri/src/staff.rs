@@ -1,6 +1,6 @@
 use crate::db;
 use crate::secrets;
-use bateleur_core::Message;
+use bateleur_core::{keep_local_action, Message};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -28,6 +28,10 @@ pub struct StaffHire {
     pub summarize_new: bool,
     #[serde(default)]
     pub drafts: bool,
+    #[serde(default)]
+    pub triage: bool,
+    #[serde(default)]
+    pub triage_new: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +45,8 @@ pub struct StaffStatus {
     pub summarize_account: bool,
     pub summarize_new: bool,
     pub drafts: bool,
+    pub triage: bool,
+    pub triage_new: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,6 +104,8 @@ pub fn status(conn: &Connection) -> Result<StaffStatus, String> {
         summarize_account: db::pref_bool_or(conn, "staff_summarize_account", false)?,
         summarize_new: db::pref_bool_or(conn, "staff_summarize_new", false)?,
         drafts: db::pref_bool_or(conn, "staff_drafts", false)?,
+        triage: db::pref_bool_or(conn, "staff_triage", false)?,
+        triage_new: db::pref_bool_or(conn, "staff_triage_new", false)?,
     })
 }
 
@@ -135,6 +143,12 @@ pub fn save(conn: &Connection, hire: StaffHire) -> Result<StaffStatus, String> {
         if hire.summarize_new { "1" } else { "0" },
     )?;
     db::set_pref(conn, "staff_drafts", if hire.drafts { "1" } else { "0" })?;
+    db::set_pref(conn, "staff_triage", if hire.triage { "1" } else { "0" })?;
+    db::set_pref(
+        conn,
+        "staff_triage_new",
+        if hire.triage_new { "1" } else { "0" },
+    )?;
     status(conn)
 }
 
@@ -144,6 +158,8 @@ pub fn clear(conn: &Connection) -> Result<StaffStatus, String> {
     db::set_pref(conn, "staff_summarize_account", "0")?;
     db::set_pref(conn, "staff_summarize_new", "0")?;
     db::set_pref(conn, "staff_drafts", "0")?;
+    db::set_pref(conn, "staff_triage", "0")?;
+    db::set_pref(conn, "staff_triage_new", "0")?;
     status(conn)
 }
 
@@ -157,6 +173,49 @@ pub fn letter_notes(conn: &Connection, message_id: &str) -> Result<StaffLetter, 
     };
     let draft = db::staff_note(conn, message_id, "draft")?.map(|(body, _, _)| body);
     Ok(StaffLetter { summary, draft })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffTriage {
+    pub feed: String,
+    pub category: Option<String>,
+    pub why: String,
+}
+
+pub fn prepare_triage(conn: &Connection, message_id: &str) -> Result<(Runtime, Message), String> {
+    let (runtime, message) = prepare(
+        conn,
+        message_id,
+        "staff_triage",
+        "Turn on Triage this letter in Hire staff.",
+    )?;
+    if db::sender_locked_reading(conn, &message.from_email)? {
+        return Err("This sender stays in Reading until you Guess again on their page.".into());
+    }
+    Ok((runtime, message))
+}
+
+pub fn decide_triage(runtime: &Runtime, message: &Message) -> Result<StaffTriage, String> {
+    let text = complete(
+        runtime,
+        "You are the triage editor on a local mail desk. Decide front page (action: needs the editor now — invoices, codes, please-reply, deadlines) vs back page (reading: newsletters, FYI, long threads). Reply with JSON only: {\"feed\":\"action\" or \"reading\",\"category\":\"short badge or null\",\"reason\":\"one sentence the editor can see\"}. Known categories: 2FA, Invoice, Receipt, Wire, Please reply, RSVP, Sign-off, Password, KYC. Use null category for reading. No greeting. No markdown.",
+        &letter_prompt(message),
+    )?;
+    Ok(parse_triage(&text))
+}
+
+pub fn store_triage(conn: &Connection, message_id: &str, triage: &StaffTriage) -> Result<(), String> {
+    if db::sender_locked_reading(conn, &db::get_message(conn, message_id)?.from_email)? {
+        return Err("This sender stays in Reading until you Guess again on their page.".into());
+    }
+    db::apply_triage(
+        conn,
+        message_id,
+        &triage.feed,
+        triage.category.as_deref(),
+        &triage.why,
+    )
 }
 
 pub fn prepare_summarize(
@@ -300,28 +359,111 @@ pub fn prepare_new(conn: &Connection, ids: &[String]) -> Result<Option<(Runtime,
 }
 
 pub fn run_new_mail(app: &tauri::AppHandle, ids: &[String]) {
-    use tauri::Manager;
+    use tauri::{Emitter, Manager};
     if ids.is_empty() {
         return;
     }
-    let prepared = {
+    let summaries = {
         let state = app.state::<crate::AppState>();
         let Ok(conn) = state.db.lock() else {
             return;
         };
         match prepare_new(&conn, ids) {
-            Ok(Some(work)) => work,
-            _ => return,
+            Ok(Some(work)) => Some(work),
+            _ => None,
         }
     };
-    for message in prepared.1 {
-        if let Ok(summary) = summarize(&prepared.0, &message) {
+    if let Some((runtime, letters)) = summaries {
+        for message in letters {
+            if let Ok(summary) = summarize(&runtime, &message) {
+                let state = app.state::<crate::AppState>();
+                let locked = state.db.lock();
+                if let Ok(conn) = locked {
+                    let _ = store_summary(&conn, &message.id, &summary);
+                }
+            }
+        }
+    }
+    let triage_batch = {
+        let state = app.state::<crate::AppState>();
+        let Ok(conn) = state.db.lock() else {
+            return;
+        };
+        match prepare_new_triage(&conn, ids) {
+            Ok(Some(work)) => Some(work),
+            _ => None,
+        }
+    };
+    let mut moved = false;
+    if let Some((runtime, letters)) = triage_batch {
+        for message in letters {
+            let Ok(decision) = decide_triage(&runtime, &message) else {
+                continue;
+            };
             let state = app.state::<crate::AppState>();
             let locked = state.db.lock();
             if let Ok(conn) = locked {
-                let _ = store_summary(&conn, &message.id, &summary);
+                if store_triage(&conn, &message.id, &decision).is_ok() {
+                    moved = true;
+                }
             }
         }
+    }
+    if !moved {
+        return;
+    }
+    let mailbox = {
+        let state = app.state::<crate::AppState>();
+        let Ok(conn) = state.db.lock() else {
+            return;
+        };
+        db::load_mailbox(&conn).ok()
+    };
+    if let Some(mailbox) = mailbox {
+        let _ = app.emit("mailbox-updated", mailbox);
+    }
+}
+
+pub fn prepare_new_triage(
+    conn: &Connection,
+    ids: &[String],
+) -> Result<Option<(Runtime, Vec<Message>)>, String> {
+    if ids.is_empty() {
+        return Ok(None);
+    }
+    if !db::pref_bool_or(conn, "staff_triage_new", false)? {
+        return Ok(None);
+    }
+    if !secrets::staff_key_present() {
+        return Ok(None);
+    }
+    let runtime = match runtime(conn) {
+        Ok(runtime) => runtime,
+        Err(_) => return Ok(None),
+    };
+    let mut letters = Vec::new();
+    for id in ids.iter().take(NEW_MAIL_LIMIT) {
+        if db::staff_note(conn, id, "triage")?.is_some() {
+            continue;
+        }
+        let Ok(message) = db::get_message(conn, id) else {
+            continue;
+        };
+        if message.folder != "inbox" || !message.unread {
+            continue;
+        }
+        if db::sender_locked_reading(conn, &message.from_email).unwrap_or(false) {
+            continue;
+        }
+        if keep_local_action(message.category.as_deref()) {
+            continue;
+        }
+        letters.push(message);
+    }
+    if letters.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some((runtime, letters)))
     }
 }
 
@@ -765,6 +907,47 @@ fn clip_text(value: &str, max: usize) -> String {
     format!("{}…", clipped.trim_end())
 }
 
+fn parse_triage(raw: &str) -> StaffTriage {
+    let cleaned = strip_fences(raw);
+    if let Ok(value) = serde_json::from_str::<Value>(cleaned) {
+        let feed = value["feed"]
+            .as_str()
+            .unwrap_or("reading")
+            .trim()
+            .to_ascii_lowercase();
+        let feed = if feed == "action" { "action" } else { "reading" };
+        let category = value["category"]
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("null"))
+            .map(|s| clip_text(s, 32));
+        let category = if feed == "reading" { None } else { category };
+        let reason = value["reason"]
+            .as_str()
+            .or_else(|| value["why"].as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| clip_text(s, 280))
+            .unwrap_or_else(|| {
+                if feed == "action" {
+                    "Staff put this on the front page.".into()
+                } else {
+                    "Staff put this in Reading.".into()
+                }
+            });
+        return StaffTriage {
+            feed: feed.into(),
+            category,
+            why: format!("Staff: {reason}"),
+        };
+    }
+    StaffTriage {
+        feed: "reading".into(),
+        category: None,
+        why: "Staff: Could not read a triage decision; left in Reading.".into(),
+    }
+}
+
 fn parse_summary(raw: &str) -> StaffSummary {
     let cleaned = strip_fences(raw);
     if let Ok(value) = serde_json::from_str::<Value>(cleaned) {
@@ -928,5 +1111,33 @@ mod tests {
         assert_eq!(brief.blurb, "Two letters need you.");
         assert_eq!(brief.items.len(), 1);
         assert_eq!(brief.items[0].id, "m1");
+    }
+
+    #[test]
+    fn parse_triage_front_page() {
+        let triage = parse_triage(
+            r#"{"feed":"action","category":"Please reply","reason":"Asks for a spec review today."}"#,
+        );
+        assert_eq!(triage.feed, "action");
+        assert_eq!(triage.category.as_deref(), Some("Please reply"));
+        assert!(triage.why.starts_with("Staff:"));
+        assert!(triage.why.contains("spec review"));
+    }
+
+    #[test]
+    fn parse_triage_reading_drops_category() {
+        let triage = parse_triage(
+            "```json\n{\"feed\":\"reading\",\"category\":\"Invoice\",\"reason\":\"A newsletter.\"}\n```",
+        );
+        assert_eq!(triage.feed, "reading");
+        assert_eq!(triage.category, None);
+        assert!(triage.why.contains("newsletter"));
+    }
+
+    #[test]
+    fn parse_triage_garbage_stays_reading() {
+        let triage = parse_triage("not json");
+        assert_eq!(triage.feed, "reading");
+        assert!(triage.why.contains("Could not read"));
     }
 }

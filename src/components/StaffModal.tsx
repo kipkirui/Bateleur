@@ -31,6 +31,8 @@ export function StaffModal({ onClose, onChange }: Props) {
   const [summarizeAccount, setSummarizeAccount] = useState(false);
   const [summarizeNew, setSummarizeNew] = useState(false);
   const [drafts, setDrafts] = useState(false);
+  const [triage, setTriage] = useState(false);
+  const [triageNew, setTriageNew] = useState(false);
   const [hired, setHired] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +70,8 @@ export function StaffModal({ onClose, onChange }: Props) {
     setSummarizeAccount(status.summarizeAccount);
     setSummarizeNew(status.summarizeNew);
     setDrafts(status.drafts);
+    setTriage(status.triage);
+    setTriageNew(status.triageNew);
     onChange(status);
   }
 
@@ -85,11 +89,18 @@ export function StaffModal({ onClose, onChange }: Props) {
         summarizeAccount,
         summarizeNew,
         drafts,
+        triage,
+        triageNew,
       });
       applyStatus(status);
       setApiKey("");
       setNote(
-        status.summarize || status.summarizeAccount || status.summarizeNew || status.drafts
+        status.summarize ||
+          status.summarizeAccount ||
+          status.summarizeNew ||
+          status.drafts ||
+          status.triage ||
+          status.triageNew
           ? "Staff is hired. Open a letter or write the Brief from the desk."
           : "Key stored. Turn on a capability to run.",
       );
@@ -206,6 +217,22 @@ export function StaffModal({ onClose, onChange }: Props) {
             onChange={(event) => setDrafts(event.target.checked)}
           />
           Generate drafts (never send)
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={triage}
+            onChange={(event) => setTriage(event.target.checked)}
+          />
+          Triage this letter (front page vs back page)
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={triageNew}
+            onChange={(event) => setTriageNew(event.target.checked)}
+          />
+          Triage new mail (on sync)
         </label>
         {error ? <p className="muted staff-error">{error}</p> : null}
         {note ? <p className="muted">{note}</p> : null}

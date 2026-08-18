@@ -584,6 +584,7 @@ pub fn apply_fetch(
 ) -> Result<Mailbox, String> {
     replace_folders(conn, account_id, folders)?;
     let mut classified = messages.to_vec();
+    apply_staff_triage(conn, &mut classified)?;
     apply_sender_prefs(conn, &mut classified)?;
     for message in &classified {
         persist_message(conn, message, parts)?;
@@ -764,6 +765,87 @@ fn apply_sender_prefs(conn: &Connection, messages: &mut [Message]) -> Result<(),
     Ok(())
 }
 
+fn apply_staff_triage(conn: &Connection, messages: &mut [Message]) -> Result<(), String> {
+    let notes = triage_notes(conn)?;
+    for message in messages {
+        let Some((why, extra)) = notes.get(&message.id) else {
+            continue;
+        };
+        let (feed, category) = parse_triage_extra(extra);
+        message.feed = feed;
+        message.category = category;
+        message.why = Some(why.clone());
+    }
+    Ok(())
+}
+
+fn triage_notes(conn: &Connection) -> Result<HashMap<String, (String, String)>, String> {
+    let mut stmt = conn
+        .prepare("SELECT message_id, body, extra FROM staff_notes WHERE kind = 'triage'")
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })
+        .map_err(err)?;
+    let mut out = HashMap::new();
+    for row in rows {
+        let (id, body, extra) = row.map_err(err)?;
+        out.insert(id, (body, extra));
+    }
+    Ok(out)
+}
+
+fn parse_triage_extra(extra: &str) -> (String, Option<String>) {
+    let extra = extra.trim();
+    if extra.is_empty() {
+        return ("reading".into(), None);
+    }
+    let (feed, rest) = extra.split_once('|').unwrap_or((extra, ""));
+    let feed = if feed.eq_ignore_ascii_case("action") {
+        "action"
+    } else {
+        "reading"
+    };
+    let category = rest
+        .trim()
+        .split('|')
+        .next()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    (feed.into(), category)
+}
+
+pub fn sender_locked_reading(conn: &Connection, email: &str) -> Result<bool, String> {
+    let prefs = sender_overrides(conn)?;
+    Ok(prefs.get(&email.to_lowercase()).map(|feed| feed == "reading").unwrap_or(false))
+}
+
+pub fn apply_triage(
+    conn: &Connection,
+    message_id: &str,
+    feed: &str,
+    category: Option<&str>,
+    why: &str,
+) -> Result<(), String> {
+    let extra = match category {
+        Some(cat) if !cat.is_empty() => format!("{feed}|{cat}"),
+        _ => feed.to_string(),
+    };
+    set_staff_note(conn, message_id, "triage", why, &extra)?;
+    conn.execute(
+        "UPDATE messages SET feed = ?1, category = ?2, why = ?3 WHERE id = ?4",
+        params![feed, category, why, message_id],
+    )
+    .map_err(err)?;
+    Ok(())
+}
+
 pub fn move_to_reading(conn: &Connection, message_id: &str) -> Result<Mailbox, String> {
     let email: String = conn
         .query_row(
@@ -776,6 +858,11 @@ pub fn move_to_reading(conn: &Connection, message_id: &str) -> Result<Mailbox, S
     conn.execute(
         "UPDATE messages SET feed = 'reading', category = NULL, why = ?1 WHERE id = ?2",
         params!["Moved to Reading.", message_id],
+    )
+    .map_err(err)?;
+    conn.execute(
+        "DELETE FROM staff_notes WHERE kind = 'triage' AND message_id = ?1",
+        [message_id],
     )
     .map_err(err)?;
     conn.execute(
@@ -823,6 +910,13 @@ pub fn reset_sender(conn: &Connection, email: &str) -> Result<Mailbox, String> {
     let email = email.trim().to_lowercase();
     conn.execute("DELETE FROM sender_prefs WHERE email = ?1", [&email])
         .map_err(err)?;
+    conn.execute(
+        "DELETE FROM staff_notes WHERE kind = 'triage' AND message_id IN (
+            SELECT id FROM messages WHERE lower(from_email) = ?1
+         )",
+        [&email],
+    )
+    .map_err(err)?;
     let mut stmt = conn
         .prepare(
             "SELECT id, subject, preview, from_email FROM messages

@@ -90,6 +90,11 @@ pub fn classify_feed(subject: &str, preview: &str, from_email: &str) -> &'static
     classify_mail(subject, preview, from_email).feed
 }
 
+/// Codes and identity checks stay Action unless the editor Guess-again. Staff triage skips these on batch.
+pub fn keep_local_action(category: Option<&str>) -> bool {
+    matches!(category, Some("2FA" | "Password" | "KYC"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,5 +118,12 @@ mod tests {
     fn two_factor_beats_generic() {
         let c = classify_mail("Your verification code", "Use 482191", "noreply@x.test");
         assert_eq!(c.category, Some("2FA"));
+        assert!(keep_local_action(c.category));
+    }
+
+    #[test]
+    fn invoice_can_be_retried() {
+        assert!(!keep_local_action(Some("Invoice")));
+        assert!(!keep_local_action(None));
     }
 }

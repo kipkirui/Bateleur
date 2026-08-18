@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { draftReply, loadInlineParts, saveAttachment, staffLetter, summarizeMail } from "../api";
+import { draftReply, loadInlineParts, saveAttachment, staffLetter, summarizeMail, triageMail } from "../api";
 import { hasRemoteImages, readableText, rewriteCidImages } from "../lib/emailHtml";
 import { formatWhen, lede, readingTime, sendFrequency } from "../lib/magazine";
 import { threadLetters } from "../lib/stories";
@@ -25,6 +25,7 @@ type Props = {
   staff: StaffStatus;
   onHire: () => void;
   onDraft: (body: string) => void;
+  onTriaged?: () => void;
   storyOverrides?: Record<string, StoryOverride>;
 };
 
@@ -45,6 +46,7 @@ export function Reader({
   staff,
   onHire,
   onDraft,
+  onTriaged,
   storyOverrides = {},
 }: Props) {
   const html = letterHtml(message);
@@ -55,7 +57,7 @@ export function Reader({
   const [saveNote, setSaveNote] = useState<string | null>(null);
   const [summary, setSummary] = useState<StaffSummary | null>(null);
   const [savedDraft, setSavedDraft] = useState<string | null>(null);
-  const [staffBusy, setStaffBusy] = useState<"summarize" | "draft" | null>(null);
+  const [staffBusy, setStaffBusy] = useState<"summarize" | "draft" | "triage" | null>(null);
   const [staffError, setStaffError] = useState<string | null>(null);
   const quote = lede(message);
   const thread = threadLetters(mailbox, message, storyOverrides);
@@ -157,7 +159,20 @@ export function Reader({
     }
   }
 
-  const showStaff = staff.summarize || staff.drafts;
+  async function onTriage() {
+    setStaffBusy("triage");
+    setStaffError(null);
+    try {
+      await triageMail(message.id);
+      onTriaged?.();
+    } catch (err) {
+      setStaffError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStaffBusy(null);
+    }
+  }
+
+  const showStaff = staff.summarize || staff.drafts || staff.triage;
 
   return (
     <div className="overlay" role="dialog" aria-modal="true">
@@ -204,6 +219,9 @@ export function Reader({
             ) : null}
             {!summary && staff.summarize && !staffError && !staff.hired ? (
               <p className="muted">Hire staff and paste a key to summarize.</p>
+            ) : null}
+            {staff.triage && message.why ? (
+              <p className="muted">{message.why}</p>
             ) : null}
             {staffError ? <p className="muted staff-error">{staffError}</p> : null}
             <div className="staff-note-actions">
@@ -252,6 +270,26 @@ export function Reader({
                 ) : (
                   <button type="button" className="text-btn" onClick={onHire}>
                     Hire staff to draft
+                  </button>
+                )
+              ) : null}
+              {staff.triage ? (
+                staff.hired ? (
+                  <button
+                    type="button"
+                    className="text-btn"
+                    disabled={staffBusy !== null}
+                    onClick={() => void onTriage()}
+                  >
+                    {staffBusy === "triage"
+                      ? "Triaging…"
+                      : message.why?.startsWith("Staff:")
+                        ? "Triage again"
+                        : "Triage this letter"}
+                  </button>
+                ) : (
+                  <button type="button" className="text-btn" onClick={onHire}>
+                    Hire staff to triage
                   </button>
                 )
               ) : null}

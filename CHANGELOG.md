@@ -8,6 +8,13 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.18.0] - 2026-08-18
+
+### Added
+
+- **Triage this letter** is an opt-in staff switch: the model can move a letter between Action (front page) and Reading (back page). Why here? shows the staff reason. Local 2FA / password / KYC stays Action on batch. A sender you moved to Reading twice still wins. Mail still works if a call fails
+- **Triage new mail (on sync)** is a second, off-by-default switch: after IDLE or Sync, up to eight new unread inbox letters can be triaged. Decisions persist across fetch so the next sync does not undo them
+
 ## [0.17.0] - 2026-08-18
 
 ### Added

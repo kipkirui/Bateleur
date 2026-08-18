@@ -6,7 +6,7 @@ mod folders;
 mod text;
 
 pub use autoconfig::{guess_servers, oauth_provider, ServerGuess};
-pub use classify::{classify_feed, classify_mail, Classification};
+pub use classify::{classify_feed, classify_mail, keep_local_action, Classification};
 pub use folders::{classify_imap_folder, ClassifiedFolder};
 pub use text::{html_to_plain, preview_text};
 

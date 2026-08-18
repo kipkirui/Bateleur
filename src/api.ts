@@ -13,6 +13,7 @@ import type {
   StaffLetter,
   StaffStatus,
   StaffSummary,
+  StaffTriage,
   StoryOverride,
 } from "./types";
 
@@ -193,6 +194,8 @@ const EMPTY_STAFF: StaffStatus = {
   summarizeAccount: false,
   summarizeNew: false,
   drafts: false,
+  triage: false,
+  triageNew: false,
 };
 
 export async function staffStatus(): Promise<StaffStatus> {
@@ -231,6 +234,13 @@ export async function draftReply(messageId: string): Promise<StaffDraft> {
     throw new Error("Drafts need the desktop app.");
   }
   return invoke<StaffDraft>("draft_reply", { messageId });
+}
+
+export async function triageMail(messageId: string): Promise<StaffTriage> {
+  if (!isTauri()) {
+    throw new Error("Triage needs the desktop app.");
+  }
+  return invoke<StaffTriage>("triage_mail", { messageId });
 }
 
 export async function staffBrief(accountId: string | null): Promise<StaffBrief | null> {

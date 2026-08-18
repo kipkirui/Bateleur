@@ -22,7 +22,7 @@ Living checklist against the product in [`Make Email Great Again.md`](./Make%20E
 
 **Plain text and summaries.** Subjects, from-names, feed previews, and the plain-text body decode HTML entities (`&nbsp;`, `&#160;`, `&amp;`, …) and strip leftover tags (`<strong>`, `<b>`, `<bold>`, `<em>`, …). Full HTML still renders those tags (nonstandard `<bold>` is treated as `<strong>`). Cleanup runs on display for already-cached mail; **Sync** writes the cleaned preview/body into SQLite.
 
-**Staff.** Hire staff stores the key in the OS keychain (`bateleur.staff`, separate from mail) and the provider, model, endpoint, and capability switches in SQLite. **Summarize this message** and **Generate drafts** run on demand from the reader when the switch is on and a key is present. **Summarize this account** writes a Morning Brief from unread Action (feed, desk, or Ctrl+K). **Summarize all new mail** is opt-in batch-on-sync: after IDLE or Sync, new unread inbox letters can get a per-letter blurb (capped). A draft opens in Compose — Send then Confirm still required. The letter body goes only to the chosen provider (OpenAI, Anthropic, Gemini, OpenRouter, or a compatible `/v1/chat/completions` endpoint). If the key is missing or a call fails, mail still works and the reader shows why. Settings is mailboxes only. Stories (pin / rename / merge / not a story) are local subject grouping, not a model call; the rail lists them only after staff is hired.
+**Staff.** Hire staff stores the key in the OS keychain (`bateleur.staff`, separate from mail) and the provider, model, endpoint, and capability switches in SQLite. **Summarize this message** and **Generate drafts** run on demand from the reader when the switch is on and a key is present. **Summarize this account** writes a Morning Brief from unread Action (feed, desk, or Ctrl+K). **Summarize all new mail** is opt-in batch-on-sync: after IDLE or Sync, new unread inbox letters can get a per-letter blurb (capped). **Triage this letter** can move a letter between Action and Reading; **Triage new mail** does the same for new unread inbox letters after sync, capped, off until that switch is on. Local 2FA / password / KYC is not batch-overridden. A sender pinned to Reading still wins. A draft opens in Compose — Send then Confirm still required. The letter body goes only to the chosen provider (OpenAI, Anthropic, Gemini, OpenRouter, or a compatible `/v1/chat/completions` endpoint). If the key is missing or a call fails, mail still works and the reader shows why. Settings is mailboxes only. Stories (pin / rename / merge / not a story) are local subject grouping, not a model call; the rail lists them only after staff is hired.
 
 ## Pending — mail client
 
@@ -32,7 +32,7 @@ These are required before Bateleur is an Outlook-shaped client, not a reader.
 
 ## Pending — staff (only after mail works)
 
-- Triage and scheduling later; no auto-send; Awaiting reply is flagged mail plus a four-day unanswered-sent nudge — still never an auto follow-up
+- Scheduling later; no auto-send; Awaiting reply is flagged mail plus a four-day unanswered-sent nudge — still never an auto follow-up
 - No our-cloud proxy, no bundled inference, no Gmail API, no Microsoft Graph
 
 ## Pending — platform

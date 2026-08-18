@@ -154,6 +154,8 @@ export type StaffStatus = {
   summarizeAccount: boolean;
   summarizeNew: boolean;
   drafts: boolean;
+  triage: boolean;
+  triageNew: boolean;
 };
 
 export type StaffHire = {
@@ -165,6 +167,8 @@ export type StaffHire = {
   summarizeAccount: boolean;
   summarizeNew: boolean;
   drafts: boolean;
+  triage: boolean;
+  triageNew: boolean;
 };
 
 export type StaffSummary = {
@@ -174,6 +178,12 @@ export type StaffSummary = {
 
 export type StaffDraft = {
   body: string;
+};
+
+export type StaffTriage = {
+  feed: "action" | "reading";
+  category: string | null;
+  why: string;
 };
 
 export type StaffLetter = {
