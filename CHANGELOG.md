@@ -8,12 +8,29 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.12.1] - 2026-08-18
+
+### Fixed
+
+- Opening a letter covers the window again instead of squeezing into a fourth sidebar column. The iframe still refuses scripts; leftover `<script>` tags in HTML mail are stripped harder so Chromium stops warning about `about:srcdoc`
+
+## [0.12.0] - 2026-08-18
+
+### Added
+
+- SQLite FTS5 index over cached mail (from, subject, preview, body). Prefix search, current mailbox or all
+- Ctrl+K / `/` command palette: jump to feeds and accounts, magazine/raw, paper, compose, settings, archive this feed or all Reading, plus letter hits. `>` filters to commands only. Signed installers stay pending
+
 ## [0.11.0] - 2026-08-18
 
 ### Added
 
 - Undo (`z` or the toast) for archive, flag, unread, and send. Archive and send wait eight seconds so undo never has to recall a letter that already left
 - Multi-select: `x` or the checkbox, then bulk Archive / Flag / unread. Escape clears the selection
+
+### Fixed
+
+- The feed list scrolls again. Magazine is a cover story, a briefing strip, and article teasers; Raw stays the dense table
 
 ## [0.10.0] - 2026-08-18
 

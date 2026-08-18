@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, sendMail, setFlag, setMailAlerts, syncAccount } from "./api";
+import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, searchMail, sendMail, setFlag, setMailAlerts, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -10,6 +10,7 @@ import { Rail } from "./components/Rail";
 import { Reader } from "./components/Reader";
 import { Settings } from "./components/Settings";
 import { SenderPage } from "./components/SenderPage";
+import { Palette, type PaletteCommand } from "./components/Palette";
 import { StaffModal } from "./components/StaffModal";
 import type { AccountDraft, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, SyncStatus } from "./types";
 import type { MailTo } from "./lib/links";
@@ -17,7 +18,7 @@ import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
 import { UNDO_MS, archiveLabel, flagLabel } from "./lib/undo";
 import "./styles.css";
 
-type Overlay = "none" | "reader" | "compose" | "settings" | "staff" | "sender";
+type Overlay = "none" | "reader" | "compose" | "settings" | "staff" | "sender" | "palette";
 
 function waitingFor(messages: Message[], accountId: string | null): number {
   return messages.filter((m) => {
@@ -32,7 +33,6 @@ export default function App() {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [feed, setFeed] = useState<FeedId>("action");
   const [mode, setMode] = useState<ReaderMode>("magazine");
-  const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<Overlay>("none");
   const [senderEmail, setSenderEmail] = useState<string | null>(null);
@@ -50,12 +50,14 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(() => new Set());
+  const [paletteHits, setPaletteHits] = useState<Message[]>([]);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const [paletteSearching, setPaletteSearching] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
   const [accountError, setAccountError] = useState<string | null>(null);
   const [accountBusy, setAccountBusy] = useState(false);
   const [settingsNonce, setSettingsNonce] = useState(0);
   const [syncByAccount, setSyncByAccount] = useState<Record<string, SyncStatus>>({});
-  const searchRef = useRef<HTMLInputElement>(null);
   const seenOnOpen = useRef<string | null>(null);
   const accountIdRef = useRef(accountId);
   accountIdRef.current = accountId;
@@ -116,7 +118,6 @@ export default function App() {
   const accounts = mailbox?.accounts ?? [];
 
   const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
     return messages.filter((m) => {
       if (accountId && m.accountId !== accountId) return false;
       if (hiddenIds.has(m.id)) return false;
@@ -126,12 +127,55 @@ export default function App() {
       if (feed.startsWith("custom:")) return m.folder === feed;
       if (m.folder !== "inbox") return false;
       if (m.feed !== feed) return false;
-      if (!q || q.startsWith("/")) return true;
-      const hay =
-        `${readableText(m.fromName)} ${m.fromEmail} ${readableText(m.subject)} ${readableText(m.preview)}`.toLowerCase();
-      return hay.includes(q);
+      return true;
     });
-  }, [messages, accountId, feed, query, hiddenIds]);
+  }, [messages, accountId, feed, hiddenIds]);
+
+  const digest = useMemo(() => {
+    if (feed !== "action") return [];
+    return messages
+      .filter((m) => {
+        if (accountId && m.accountId !== accountId) return false;
+        if (hiddenIds.has(m.id)) return false;
+        return m.folder === "inbox" && m.feed === "reading";
+      })
+      .slice(0, 6);
+  }, [messages, accountId, feed, hiddenIds]);
+
+  useEffect(() => {
+    if (overlay !== "palette") return;
+    const q = paletteQuery.trim();
+    if (q.length < 2 || q.startsWith(">")) {
+      setPaletteHits([]);
+      setPaletteSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setPaletteSearching(true);
+    const timer = window.setTimeout(() => {
+      void searchMail(q, accountId)
+        .then((ids) => {
+          if (cancelled) return;
+          const byId = new Map(messages.map((m) => [m.id, m]));
+          setPaletteHits(
+            ids.flatMap((id) => {
+              const hit = byId.get(id);
+              return hit ? [hit] : [];
+            }),
+          );
+        })
+        .catch(() => {
+          if (!cancelled) setPaletteHits([]);
+        })
+        .finally(() => {
+          if (!cancelled) setPaletteSearching(false);
+        });
+    }, 120);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [overlay, paletteQuery, accountId, messages]);
 
   const selected =
     messages.find((m) => m.id === selectedId) ?? visible[0] ?? null;
@@ -538,8 +582,21 @@ export default function App() {
         e.target instanceof HTMLTextAreaElement ||
         (e.target instanceof HTMLElement && e.target.isContentEditable);
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        if (
+          overlay === "compose" ||
+          overlay === "settings" ||
+          overlay === "staff" ||
+          overlay === "sender"
+        ) {
+          return;
+        }
         e.preventDefault();
-        searchRef.current?.focus();
+        if (overlay === "palette") setOverlay("none");
+        else {
+          setPaletteQuery("");
+          setPaletteHits([]);
+          setOverlay("palette");
+        }
         return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
@@ -556,12 +613,19 @@ export default function App() {
         return;
       }
       if (typing) return;
-      if (overlay === "compose" || overlay === "settings" || overlay === "staff" || overlay === "sender") {
+      if (overlay === "compose" || overlay === "settings" || overlay === "staff" || overlay === "sender" || overlay === "palette") {
         return;
       }
       if (e.key === "z" && canUndo) {
         e.preventDefault();
         onUndo();
+        return;
+      }
+      if (e.key === "/" ) {
+        e.preventDefault();
+        setPaletteQuery("");
+        setPaletteHits([]);
+        setOverlay("palette");
         return;
       }
       if (e.key === "j") move(1);
@@ -642,11 +706,154 @@ export default function App() {
               ? "Nothing in this folder."
               : feed === "action"
                 ? "Nothing needs you right now."
-                : query.startsWith("/")
-                ? "Staff is off. Commands need a key — Hire staff."
                 : "Nothing in this feed.";
 
+  const paletteCommands: PaletteCommand[] = [
+    {
+      id: "compose",
+      label: "Compose",
+      hint: "c",
+      run: () => {
+        setOverlay("none");
+        openCompose();
+      },
+    },
+    {
+      id: "action",
+      label: "Go to Action",
+      run: () => {
+        setFeed("action");
+        setOverlay("none");
+      },
+    },
+    {
+      id: "reading",
+      label: "Go to Reading",
+      run: () => {
+        setFeed("reading");
+        setOverlay("none");
+      },
+    },
+    {
+      id: "sent",
+      label: "Go to Sent",
+      run: () => {
+        setFeed("sent");
+        setOverlay("none");
+      },
+    },
+    {
+      id: "drafts",
+      label: "Go to Drafts",
+      run: () => {
+        setFeed("drafts");
+        setOverlay("none");
+      },
+    },
+    {
+      id: "junk",
+      label: "Go to Junk",
+      run: () => {
+        setFeed("junk");
+        setOverlay("none");
+      },
+    },
+    {
+      id: "magazine",
+      label: "Magazine view",
+      run: () => {
+        setMode("magazine");
+        setOverlay("none");
+      },
+    },
+    {
+      id: "raw",
+      label: "Raw view",
+      run: () => {
+        setMode("raw");
+        setOverlay("none");
+      },
+    },
+    {
+      id: "theme",
+      label: theme === "day" ? "Night paper" : "Day paper",
+      run: () => {
+        setTheme((t) => (t === "day" ? "night" : "day"));
+        setOverlay("none");
+      },
+    },
+    {
+      id: "archive-visible",
+      label: "Archive this feed",
+      hint: `${visible.length}`,
+      run: () => {
+        setOverlay("none");
+        queueArchive(visible);
+      },
+    },
+    {
+      id: "archive-reading",
+      label: "Archive all in Reading",
+      run: () => {
+        setOverlay("none");
+        queueArchive(
+          messages.filter(
+            (m) =>
+              m.folder === "inbox" &&
+              m.feed === "reading" &&
+              !hiddenIds.has(m.id) &&
+              (!accountId || m.accountId === accountId),
+          ),
+        );
+      },
+    },
+    {
+      id: "settings",
+      label: "Settings",
+      run: () => {
+        setAccountError(null);
+        setOverlay("settings");
+      },
+    },
+    {
+      id: "staff",
+      label: "Hire staff",
+      run: () => {
+        setDeskOpen(true);
+        setOverlay("staff");
+      },
+    },
+    {
+      id: "all-mail",
+      label: "All mailboxes",
+      run: () => {
+        setAccountId(null);
+        setOverlay("none");
+      },
+    },
+    ...accounts.map((account) => ({
+      id: `acct-${account.id}`,
+      label: `Jump to ${account.label}`,
+      hint: account.address,
+      run: () => {
+        setAccountId(account.id);
+        setOverlay("none");
+      },
+    })),
+    ...(mailbox?.folders ?? [])
+      .filter((folder) => folder.canonical === "custom")
+      .map((folder) => ({
+        id: `folder-${folder.imapName}`,
+        label: `Go to ${folder.label}`,
+        run: () => {
+          setFeed(`custom:${folder.imapName}`);
+          setOverlay("none");
+        },
+      })),
+  ];
+
   return (
+    <>
     <div className={deskOpen ? "shell desk-open" : "shell"}>
       <Rail
         accounts={accounts}
@@ -668,13 +875,15 @@ export default function App() {
         onTheme={() => setTheme((t) => (t === "day" ? "night" : "day"))}
       />
       <Feed
-        query={query}
-        onQuery={setQuery}
-        onCommandHint={() => setToast("Staff is off — Hire staff to paste a key")}
-        searchRef={searchRef}
+        onPalette={() => {
+          setPaletteQuery("");
+          setPaletteHits([]);
+          setOverlay("palette");
+        }}
         mode={mode}
         feed={feed}
         messages={visible}
+        digest={digest}
         selectedId={selected?.id ?? null}
         checkedIds={checkedIds}
         onSelect={setSelectedId}
@@ -700,6 +909,7 @@ export default function App() {
           setOverlay("staff");
         }}
       />
+    </div>
 
       {overlay === "reader" && selected ? (
         <Reader
@@ -774,6 +984,20 @@ export default function App() {
         <StaffModal onClose={() => setOverlay("none")} />
       ) : null}
 
+      {overlay === "palette" ? (
+        <Palette
+          commands={paletteCommands}
+          hits={paletteHits}
+          searching={paletteSearching}
+          onQuery={setPaletteQuery}
+          onClose={() => setOverlay("none")}
+          onOpen={(id) => {
+            setSelectedId(id);
+            setOverlay("reader");
+          }}
+        />
+      ) : null}
+
       {overlay === "sender" && senderEmail ? (
         <SenderPage
           email={senderEmail}
@@ -814,7 +1038,7 @@ export default function App() {
           ) : null}
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
 

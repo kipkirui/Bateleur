@@ -171,3 +171,8 @@ export async function lockSenderReading(email: string): Promise<Mailbox> {
   const mailbox = await invoke<Mailbox>("lock_sender_reading", { email });
   return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, null);
 }
+
+export async function searchMail(query: string, accountId: string | null): Promise<string[]> {
+  if (!isTauri()) return [];
+  return invoke<string[]>("search_mail", { query, accountId });
+}

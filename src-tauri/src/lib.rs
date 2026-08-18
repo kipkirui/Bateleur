@@ -577,6 +577,16 @@ fn lock_sender_reading(state: State<AppState>, email: String) -> Result<Mailbox,
     db::lock_sender_reading(&conn, &email)
 }
 
+#[tauri::command]
+fn search_mail(
+    state: State<AppState>,
+    query: String,
+    account_id: Option<String>,
+) -> Result<Vec<String>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::search_ids(&conn, &query, account_id.as_deref())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tls::install();
@@ -612,7 +622,8 @@ pub fn run() {
             set_mail_alerts,
             move_to_reading,
             reset_sender,
-            lock_sender_reading
+            lock_sender_reading,
+            search_mail
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

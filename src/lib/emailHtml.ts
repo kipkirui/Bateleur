@@ -155,8 +155,14 @@ export function hasRemoteImages(html: string): boolean {
     || /url\s*\(\s*['"]?\/\//i.test(html);
 }
 
+function stripScriptTags(html: string): string {
+  return html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<script\b[^>]*>/gi, "");
+}
+
 export function sanitizeEmailHtml(html: string, remoteImages = false): string {
-  const recovered = wrapLeadingCss(html);
+  const recovered = wrapLeadingCss(stripScriptTags(html));
   const doc = new DOMParser().parseFromString(recovered, "text/html");
   for (const el of [...doc.querySelectorAll("*")]) {
     if (el.tagName === "BOLD") {
@@ -224,7 +230,7 @@ export function sanitizeEmailHtml(html: string, remoteImages = false): string {
     cssParts.push(scrubCss(style.textContent ?? "", remoteImages));
     style.remove();
   }
-  return wrapEmailDocument(cssParts, doc.body?.innerHTML ?? "");
+  return wrapEmailDocument(cssParts, stripScriptTags(doc.body?.innerHTML ?? ""));
 }
 
 function wrapLeadingCss(html: string): string {
@@ -267,6 +273,7 @@ function wrapEmailDocument(cssParts: string[], body: string): string {
     <meta charset="utf-8" />
     <meta name="referrer" content="no-referrer" />
     <meta name="color-scheme" content="light dark" />
+    <meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; base-uri 'none'" />
     <style>
       html, body { margin: 0; padding: 0; }
       img { max-width: 100% !important; height: auto !important; }

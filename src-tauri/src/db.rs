@@ -87,6 +87,7 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
     );
     let _ = conn.execute("ALTER TABLE messages ADD COLUMN category TEXT", []);
     let _ = conn.execute("ALTER TABLE messages ADD COLUMN why TEXT", []);
+    ensure_fts(&conn)?;
     Ok(conn)
 }
 
@@ -234,6 +235,7 @@ pub fn upsert_message(conn: &Connection, message: &Message) -> Result<(), String
         ],
     )
     .map_err(err)?;
+    upsert_fts(conn, message)?;
     Ok(())
 }
 
@@ -373,6 +375,11 @@ pub fn remove_account(conn: &Connection, id: &str) -> Result<Account, String> {
         [id],
     )
     .map_err(err)?;
+    conn.execute(
+        "DELETE FROM mail_fts WHERE message_id IN (SELECT id FROM messages WHERE account_id = ?1)",
+        [id],
+    )
+    .map_err(err)?;
     conn.execute("DELETE FROM messages WHERE account_id = ?1", [id])
         .map_err(err)?;
     conn.execute("DELETE FROM folders WHERE account_id = ?1", [id])
@@ -443,6 +450,8 @@ pub fn apply_flag_change(
 pub fn delete_message(conn: &Connection, id: &str) -> Result<(), String> {
     conn.execute("DELETE FROM attachments WHERE message_id = ?1", [id])
         .map_err(err)?;
+    conn.execute("DELETE FROM mail_fts WHERE message_id = ?1", [id])
+        .map_err(err)?;
     conn.execute("DELETE FROM messages WHERE id = ?1", [id])
         .map_err(err)?;
     Ok(())
@@ -508,6 +517,7 @@ pub fn apply_fetch(
     }
     remember_pop_uidls(conn, account_id, pop_uidls)?;
     prune_stale_inbox(conn, account_id)?;
+    prune_fts(conn)?;
     if messages
         .iter()
         .any(|m| m.folder == "sent" && m.id.contains(":sent:"))
@@ -725,6 +735,131 @@ pub fn reset_sender(conn: &Connection, email: &str) -> Result<Mailbox, String> {
     load_mailbox(conn)
 }
 
+fn ensure_fts(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS mail_fts USING fts5(
+            message_id UNINDEXED,
+            from_name,
+            from_email,
+            subject,
+            preview,
+            body,
+            tokenize = 'unicode61 remove_diacritics 2'
+        );",
+    )
+    .map_err(err)?;
+    let indexed: i64 = conn
+        .query_row("SELECT COUNT(*) FROM mail_fts", [], |row| row.get(0))
+        .map_err(err)?;
+    let stored: i64 = conn
+        .query_row("SELECT COUNT(*) FROM messages", [], |row| row.get(0))
+        .map_err(err)?;
+    if indexed == stored {
+        return Ok(());
+    }
+    conn.execute("DELETE FROM mail_fts", []).map_err(err)?;
+    conn.execute(
+        "INSERT INTO mail_fts (message_id, from_name, from_email, subject, preview, body)
+         SELECT id, from_name, from_email, subject, preview, body FROM messages",
+        [],
+    )
+    .map_err(err)?;
+    Ok(())
+}
+
+fn upsert_fts(conn: &Connection, message: &Message) -> Result<(), String> {
+    conn.execute("DELETE FROM mail_fts WHERE message_id = ?1", [&message.id])
+        .map_err(err)?;
+    conn.execute(
+        "INSERT INTO mail_fts (message_id, from_name, from_email, subject, preview, body)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            message.id,
+            message.from_name,
+            message.from_email,
+            message.subject,
+            message.preview,
+            message.body,
+        ],
+    )
+    .map_err(err)?;
+    Ok(())
+}
+
+fn prune_fts(conn: &Connection) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM mail_fts WHERE message_id NOT IN (SELECT id FROM messages)",
+        [],
+    )
+    .map_err(err)?;
+    Ok(())
+}
+
+pub fn search_ids(
+    conn: &Connection,
+    query: &str,
+    account_id: Option<&str>,
+) -> Result<Vec<String>, String> {
+    let Some(matched) = fts_match(query) else {
+        return Ok(Vec::new());
+    };
+    let sql = if account_id.is_some() {
+        "SELECT mail_fts.message_id
+         FROM mail_fts
+         JOIN messages ON messages.id = mail_fts.message_id
+         WHERE mail_fts MATCH ?1 AND messages.account_id = ?2
+         ORDER BY rank
+         LIMIT 40"
+    } else {
+        "SELECT mail_fts.message_id
+         FROM mail_fts
+         JOIN messages ON messages.id = mail_fts.message_id
+         WHERE mail_fts MATCH ?1
+         ORDER BY rank
+         LIMIT 40"
+    };
+    let mut stmt = conn.prepare(sql).map_err(err)?;
+    let mut out = Vec::new();
+    if let Some(account) = account_id {
+        let rows = stmt
+            .query_map(params![matched, account], |row| row.get::<_, String>(0))
+            .map_err(err)?;
+        for row in rows {
+            out.push(row.map_err(err)?);
+        }
+    } else {
+        let rows = stmt
+            .query_map(params![matched], |row| row.get::<_, String>(0))
+            .map_err(err)?;
+        for row in rows {
+            out.push(row.map_err(err)?);
+        }
+    }
+    Ok(out)
+}
+
+fn fts_match(raw: &str) -> Option<String> {
+    let terms: Vec<String> = raw
+        .split_whitespace()
+        .filter(|token| !token.starts_with('/') && !token.starts_with('>'))
+        .map(sanitize_fts_term)
+        .filter(|term| term.len() >= 2)
+        .map(|term| format!("{term}*"))
+        .collect();
+    if terms.is_empty() {
+        None
+    } else {
+        Some(terms.join(" AND "))
+    }
+}
+
+fn sanitize_fts_term(token: &str) -> String {
+    token
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '@' | '.' | '-' | '_'))
+        .collect()
+}
+
 fn folder_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MailFolder> {
     Ok(MailFolder {
         account_id: row.get(0)?,
@@ -802,4 +937,20 @@ fn account_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Account> {
 
 fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
+}
+
+#[cfg(test)]
+mod fts_tests {
+    use super::*;
+
+    #[test]
+    fn match_joins_prefix_terms() {
+        assert_eq!(fts_match("invoice acme").as_deref(), Some("invoice* AND acme*"));
+    }
+
+    #[test]
+    fn skips_short_and_commands() {
+        assert_eq!(fts_match("a").as_deref(), None);
+        assert_eq!(fts_match(">action").as_deref(), None);
+    }
 }

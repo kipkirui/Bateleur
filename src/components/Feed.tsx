@@ -1,17 +1,15 @@
-import { useState, type MouseEvent, type RefObject } from "react";
+import { useState, type MouseEvent } from "react";
 import { readableText } from "../lib/emailHtml";
 import { formatWhen, lede } from "../lib/magazine";
 import { Avatar } from "./Avatar";
 import type { FeedId, Message, ReaderMode } from "../types";
 
 type Props = {
-  query: string;
-  onQuery: (value: string) => void;
-  onCommandHint: () => void;
-  searchRef: RefObject<HTMLInputElement | null>;
+  onPalette: () => void;
   mode: ReaderMode;
   feed: FeedId;
   messages: Message[];
+  digest: Message[];
   selectedId: string | null;
   checkedIds: Set<string>;
   onSelect: (id: string) => void;
@@ -28,13 +26,11 @@ type Props = {
 };
 
 export function Feed({
-  query,
-  onQuery,
-  onCommandHint,
-  searchRef,
+  onPalette,
   mode,
   feed,
   messages,
+  digest,
   selectedId,
   checkedIds,
   onSelect,
@@ -49,29 +45,16 @@ export function Feed({
   onClearChecked,
   emptyLabel,
 }: Props) {
-  const actionEmpty = feed === "action" && messages.length === 0 && !query.trim();
   const checked = checkedIds.size;
+  const selecting = checked > 0;
+  const actionEmpty = feed === "action" && messages.length === 0;
 
   return (
     <section className="center">
-      <div className="command">
-        <input
-          ref={searchRef}
-          value={query}
-          onChange={(e) => onQuery(e.target.value)}
-          placeholder="Search mail"
-          aria-label="Search mail"
-          onKeyDown={(e) => {
-            if (e.key === "/" && query === "") {
-              e.preventDefault();
-              onCommandHint();
-            }
-          }}
-        />
-        <span className="command-hint">
-          {query.startsWith("/") ? "Staff is off — commands need a key" : "Ctrl+K"}
-        </span>
-      </div>
+      <button type="button" className="command" onClick={onPalette}>
+        <span>Search mail or jump</span>
+        <span className="command-hint">Ctrl+K</span>
+      </button>
 
       {checked > 0 ? (
         <div className="bulk-bar">
@@ -92,76 +75,85 @@ export function Feed({
         </div>
       ) : null}
 
-      {actionEmpty ? (
-        <div className="empty empty-clear">
-          <p>Nothing needs you right now.</p>
-          <p className="muted">Action is clear. Reading is still there when you want it.</p>
-        </div>
-      ) : messages.length === 0 ? (
-        <div className="empty">{emptyLabel}</div>
-      ) : mode === "raw" ? (
-        <ul className="raw-list">
-          {messages.map((message) => (
-            <li key={message.id}>
-              <div
-                className={`raw-row${selectedId === message.id ? " selected" : ""}${checkedIds.has(message.id) ? " checked" : ""}`}
-                onClick={() => onSelect(message.id)}
-                onDoubleClick={() => onOpen(message.id)}
-              >
-                <Check
-                  on={checkedIds.has(message.id)}
-                  onToggle={() => onToggleCheck(message.id)}
+      <div className="feed-scroll">
+        {actionEmpty ? (
+          <div className="empty empty-clear">
+            <p>Nothing needs you right now.</p>
+            <p className="muted">Action is clear. Reading is still there when you want it.</p>
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="empty">{emptyLabel}</div>
+        ) : mode === "raw" ? (
+          <ul className="raw-list">
+            {messages.map((message) => (
+              <li key={message.id}>
+                <div
+                  className={`raw-row${selectedId === message.id ? " selected" : ""}${checkedIds.has(message.id) ? " checked" : ""}`}
+                  onClick={() => onSelect(message.id)}
+                  onDoubleClick={() => onOpen(message.id)}
+                >
+                  <Check
+                    on={checkedIds.has(message.id)}
+                    onToggle={() => onToggleCheck(message.id)}
+                  />
+                  <span className={message.unread ? "dot unread" : "dot"} />
+                  <span className="raw-from">
+                    {readableText(message.fromName)}
+                    {message.flagged ? <span className="flag-mark" title="Flagged" /> : null}
+                  </span>
+                  <span className="raw-subject">{readableText(message.subject)}</span>
+                  <span className="raw-preview">{readableText(message.preview)}</span>
+                  <span className="raw-when">{formatWhen(message.receivedAt)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : feed === "action" ? (
+          <ActionMagazine
+            messages={messages}
+            digest={digest}
+            selectedId={selectedId}
+            checkedIds={checkedIds}
+            selecting={selecting}
+            onSelect={onSelect}
+            onToggleCheck={onToggleCheck}
+            onOpen={onOpen}
+            onArchive={onArchive}
+            onReply={onReply}
+            onReading={onReading}
+            onSender={onSender}
+          />
+        ) : (
+          <div className="magazine">
+            <div className="block">
+              <h2>{feedHeading(feed)}</h2>
+              {messages.map((message) => (
+                <ArticleTeaser
+                  key={message.id}
+                  message={message}
+                  selected={selectedId === message.id}
+                  checked={checkedIds.has(message.id)}
+                  selecting={selecting}
+                  onSelect={onSelect}
+                  onToggleCheck={onToggleCheck}
+                  onOpen={onOpen}
+                  onSender={onSender}
                 />
-                <span className={message.unread ? "dot unread" : "dot"} />
-                <span className="raw-from">
-                  {readableText(message.fromName)}
-                  {message.flagged ? <span className="flag-mark" title="Flagged" /> : null}
-                </span>
-                <span className="raw-subject">{readableText(message.subject)}</span>
-                <span className="raw-preview">{readableText(message.preview)}</span>
-                <span className="raw-when">{formatWhen(message.receivedAt)}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : feed === "action" ? (
-        <ActionMagazine
-          messages={messages}
-          selectedId={selectedId}
-          checkedIds={checkedIds}
-          onSelect={onSelect}
-          onToggleCheck={onToggleCheck}
-          onOpen={onOpen}
-          onArchive={onArchive}
-          onReply={onReply}
-          onReading={onReading}
-          onSender={onSender}
-        />
-      ) : (
-        <div className="block">
-          <h2>{feedHeading(feed)}</h2>
-          {messages.map((message) => (
-            <ReadingRow
-              key={message.id}
-              message={message}
-              selected={selectedId === message.id}
-              checked={checkedIds.has(message.id)}
-              onSelect={onSelect}
-              onToggleCheck={onToggleCheck}
-              onOpen={onOpen}
-              onSender={onSender}
-            />
-          ))}
-        </div>
-      )}
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
 
 function ActionMagazine({
   messages,
+  digest,
   selectedId,
   checkedIds,
+  selecting,
   onSelect,
   onToggleCheck,
   onOpen,
@@ -171,8 +163,10 @@ function ActionMagazine({
   onSender,
 }: {
   messages: Message[];
+  digest: Message[];
   selectedId: string | null;
   checkedIds: Set<string>;
+  selecting: boolean;
   onSelect: (id: string) => void;
   onToggleCheck: (id: string) => void;
   onOpen: (id: string) => void;
@@ -184,15 +178,14 @@ function ActionMagazine({
   const [lead, ...rest] = messages;
   return (
     <div className="magazine">
-      <div className="block">
-        <h2>Action</h2>
-        {lead ? (
-          <ActionCard
-            key={lead.id}
+      {lead ? (
+        <div className="block">
+          <h2>Cover</h2>
+          <Cover
             message={lead}
-            lead
             selected={selectedId === lead.id}
             checked={checkedIds.has(lead.id)}
+            selecting={selecting}
             onSelect={onSelect}
             onToggleCheck={onToggleCheck}
             onOpen={onOpen}
@@ -201,23 +194,38 @@ function ActionMagazine({
             onReading={onReading}
             onSender={onSender}
           />
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       {rest.length > 0 ? (
         <div className="block briefing">
           <h2>Briefing</h2>
           {rest.map((message) => (
-            <ActionCard
+            <BriefRow
               key={message.id}
               message={message}
               selected={selectedId === message.id}
               checked={checkedIds.has(message.id)}
+              selecting={selecting}
               onSelect={onSelect}
               onToggleCheck={onToggleCheck}
               onOpen={onOpen}
-              onArchive={onArchive}
-              onReply={onReply}
-              onReading={onReading}
+            />
+          ))}
+        </div>
+      ) : null}
+      {digest.length > 0 ? (
+        <div className="block">
+          <h2>Reading</h2>
+          {digest.map((message) => (
+            <ArticleTeaser
+              key={message.id}
+              message={message}
+              selected={selectedId === message.id}
+              checked={checkedIds.has(message.id)}
+              selecting={selecting}
+              onSelect={onSelect}
+              onToggleCheck={onToggleCheck}
+              onOpen={onOpen}
               onSender={onSender}
             />
           ))}
@@ -227,11 +235,11 @@ function ActionMagazine({
   );
 }
 
-function ActionCard({
+function Cover({
   message,
-  lead = false,
   selected,
   checked,
+  selecting,
   onSelect,
   onToggleCheck,
   onOpen,
@@ -241,9 +249,9 @@ function ActionCard({
   onSender,
 }: {
   message: Message;
-  lead?: boolean;
   selected: boolean;
   checked: boolean;
+  selecting: boolean;
   onSelect: (id: string) => void;
   onToggleCheck: (id: string) => void;
   onOpen: (id: string) => void;
@@ -259,34 +267,33 @@ function ActionCard({
     fn();
   }
 
+  const kicker = [message.category, message.hero?.label].filter(Boolean).join(" · ");
+
   return (
     <article
-      className={`action-card${lead ? " lead" : ""}${selected ? " selected" : ""}${checked ? " checked" : ""}`}
+      className={`cover${selected ? " selected" : ""}${checked ? " checked" : ""}`}
       onClick={() => onSelect(message.id)}
       onDoubleClick={() => onOpen(message.id)}
     >
-      <div className="card-head">
-        <span className="card-who">
+      <div className="cover-kicker">
+        {selecting || checked ? (
           <Check on={checked} onToggle={() => onToggleCheck(message.id)} />
-          <button
-            type="button"
-            className="sender-btn"
-            onClick={(e) => stop(e, () => onSender(message))}
-          >
-            <Avatar name={message.fromName} email={message.fromEmail} size={lead ? "lg" : "md"} />
-            <span>
-              <strong>
-                {readableText(message.fromName)}
-                {message.flagged ? <span className="flag-mark" title="Flagged" /> : null}
-              </strong>
-              <span className="card-when">{formatWhen(message.receivedAt)}</span>
-            </span>
-          </button>
-        </span>
-        {message.category ? <span className="badge">{message.category}</span> : null}
+        ) : null}
+        <span>{kicker || "Action"}</span>
+        <span>{formatWhen(message.receivedAt)}</span>
       </div>
-      <h3 className={lead ? "card-hed" : "card-hed compact"}>{readableText(message.subject)}</h3>
-      <p className="card-lede">{lede(message)}</p>
+      <h3 className="cover-hed">{readableText(message.subject)}</h3>
+      <blockquote className="cover-lede">{lede(message)}</blockquote>
+      <button type="button" className="sender-btn cover-byline" onClick={(e) => stop(e, () => onSender(message))}>
+        <Avatar name={message.fromName} email={message.fromEmail} size="md" />
+        <span>
+          <strong>
+            {readableText(message.fromName)}
+            {message.flagged ? <span className="flag-mark" title="Flagged" /> : null}
+          </strong>
+          <span className="card-when">{message.fromEmail}</span>
+        </span>
+      </button>
       {fileCount(message) ? <div className="file-count">{fileLabel(fileCount(message))}</div> : null}
       {why && message.why ? <p className="why-copy">{message.why}</p> : null}
       <div className="card-actions">
@@ -309,10 +316,48 @@ function ActionCard({
   );
 }
 
-function ReadingRow({
+function BriefRow({
   message,
   selected,
   checked,
+  selecting,
+  onSelect,
+  onToggleCheck,
+  onOpen,
+}: {
+  message: Message;
+  selected: boolean;
+  checked: boolean;
+  selecting: boolean;
+  onSelect: (id: string) => void;
+  onToggleCheck: (id: string) => void;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <div
+      className={`brief-row${selected ? " selected" : ""}${checked ? " checked" : ""}`}
+      onClick={() => onSelect(message.id)}
+      onDoubleClick={() => onOpen(message.id)}
+    >
+      {selecting || checked ? (
+        <Check on={checked} onToggle={() => onToggleCheck(message.id)} />
+      ) : (
+        <span className={message.unread ? "dot unread" : "dot"} />
+      )}
+      <span className="brief-hed">
+        {message.category ? <span className="badge">{message.category}</span> : null}
+        <span className="brief-copy">{readableText(message.subject)}</span>
+      </span>
+      <span className="brief-from">{readableText(message.fromName)}</span>
+    </div>
+  );
+}
+
+function ArticleTeaser({
+  message,
+  selected,
+  checked,
+  selecting,
   onSelect,
   onToggleCheck,
   onOpen,
@@ -321,32 +366,41 @@ function ReadingRow({
   message: Message;
   selected: boolean;
   checked: boolean;
+  selecting: boolean;
   onSelect: (id: string) => void;
   onToggleCheck: (id: string) => void;
   onOpen: (id: string) => void;
   onSender: (message: Message) => void;
 }) {
   return (
-    <div
-      className={`reading-row${selected ? " selected" : ""}${checked ? " checked" : ""}`}
+    <article
+      className={`teaser${selected ? " selected" : ""}${checked ? " checked" : ""}`}
       onClick={() => onSelect(message.id)}
       onDoubleClick={() => onOpen(message.id)}
     >
-      <Check on={checked} onToggle={() => onToggleCheck(message.id)} />
-      <Avatar name={message.fromName} email={message.fromEmail} size="sm" />
-      <button type="button" className="sender-btn reading-from" onClick={(e) => {
-        e.stopPropagation();
-        onSender(message);
-      }}>
-        {readableText(message.fromName)}
-        {message.flagged ? <span className="flag-mark" title="Flagged" /> : null}
+      <div className={`hero tone-${message.hero?.tone ?? "paper"}`}>
+        {selecting || checked ? (
+          <Check on={checked} onToggle={() => onToggleCheck(message.id)} />
+        ) : null}
+        {message.hero?.label ?? message.fromEmail.split("@")[1] ?? "Letter"}
+      </div>
+      <h3>{readableText(message.subject)}</h3>
+      <button
+        type="button"
+        className="sender-btn"
+        onClick={(e) => {
+          e.stopPropagation();
+          onSender(message);
+        }}
+      >
+        <span className="byline">
+          Latest by {readableText(message.fromName)}
+          {message.flagged ? <span className="flag-mark" title="Flagged" /> : null}
+          <span> · {formatWhen(message.receivedAt)}</span>
+        </span>
       </button>
-      <span className="reading-copy">
-        <span className="reading-subject">{readableText(message.subject)}</span>
-        <span className="reading-preview">{lede(message)}</span>
-      </span>
-      <span className="reading-when">{formatWhen(message.receivedAt)}</span>
-    </div>
+      <p>{lede(message)}</p>
+    </article>
   );
 }
 

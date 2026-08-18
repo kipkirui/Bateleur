@@ -221,14 +221,25 @@ kbd {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .command {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid var(--rule);
   padding: 12px 24px;
+  width: 100%;
+  background: transparent;
+  text-align: left;
+}
+
+.command span:first-child {
+  color: var(--ink-soft);
+  font-size: 15px;
 }
 
 .command input {
@@ -246,14 +257,18 @@ kbd {
   text-transform: uppercase;
 }
 
+.feed-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 8px 28px 48px;
+}
+
 .magazine,
 .raw-list,
 .empty {
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: 8px 28px 40px;
   min-height: 0;
-  flex: 1;
 }
 
 .empty {
@@ -292,7 +307,6 @@ kbd {
 .action-row.selected,
 .article.selected,
 .raw-row.selected,
-.action-card.checked,
 .reading-row.checked,
 .raw-row.checked {
   background: var(--select);
@@ -485,25 +499,136 @@ kbd {
   white-space: nowrap;
 }
 
-.action-card {
+.cover {
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  padding: 28px 28px 20px;
+  cursor: pointer;
+}
+
+.cover.selected,
+.cover.checked,
+.teaser.selected,
+.teaser.checked,
+.brief-row.selected,
+.brief-row.checked {
+  background: var(--select);
+}
+
+.cover-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 14px;
+}
+
+.cover-kicker span:last-child {
+  margin-left: auto;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--ink-soft);
+}
+
+.cover-hed {
+  font-family: var(--font-voice);
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 1.12;
+  margin: 0 0 16px;
+}
+
+.cover-lede {
+  margin: 0 0 20px;
+  padding: 0 0 0 16px;
+  border-left: 2px solid var(--amber);
+  font-family: var(--font-voice);
+  font-size: 20px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.cover-byline {
+  margin-bottom: 8px;
+}
+
+.brief-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) 140px;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 11px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.brief-hed {
+  font-family: var(--font-voice);
+  font-size: 17px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.brief-copy {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief-from {
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teaser {
   display: block;
   width: 100%;
   text-align: left;
   background: transparent;
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  padding: 16px 16px 12px;
-  margin: 0 0 12px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  padding: 8px 0 26px;
   cursor: pointer;
 }
 
-.action-card.lead {
-  padding: 22px 18px 14px;
+.teaser .hero {
+  margin: 0 0 14px;
 }
 
-.action-card.selected {
-  background: var(--select);
-  border-color: var(--amber-soft);
+.teaser h3 {
+  font-family: var(--font-voice);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0 0 8px;
+}
+
+.teaser p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.5;
+  font-size: 15px;
+}
+
+.teaser .hero .check-mark {
+  margin: 0 8px 0 0;
 }
 
 .card-head {
@@ -589,8 +714,8 @@ kbd {
   color: var(--ink-soft);
 }
 
-.briefing .action-card {
-  padding: 12px 14px 10px;
+.hero .check-mark {
+  border-color: var(--ink);
 }
 
 .reading-row {
@@ -862,6 +987,54 @@ kbd {
   align-items: stretch;
   padding: 32px 8vw;
   z-index: 20;
+}
+
+.overlay-palette {
+  align-items: flex-start;
+}
+
+.palette {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  width: min(560px, 100%);
+  max-height: min(70vh, 540px);
+  margin-top: 12vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.palette input {
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  padding: 14px 16px;
+  background: transparent;
+  outline: none;
+  font-size: 16px;
+}
+
+.palette-list {
+  overflow-y: auto;
+  padding: 8px 0 12px;
+}
+
+.palette-list .muted {
+  padding: 12px 16px;
+}
+
+.palette-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 9px 16px;
+  text-align: left;
+}
+
+.palette-row.active {
+  background: var(--select);
 }
 
 .reader,
@@ -1279,9 +1452,7 @@ kbd {
 
 .rail,
 .desk,
-.magazine,
-.raw-list,
-.empty,
+.feed-scroll,
 .settings {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
@@ -1289,36 +1460,28 @@ kbd {
 
 .rail:hover,
 .desk:hover,
-.magazine:hover,
-.raw-list:hover,
-.empty:hover,
+.feed-scroll:hover,
 .settings:hover {
   scrollbar-color: color-mix(in srgb, var(--ink) 40%, transparent) transparent;
 }
 
 .rail::-webkit-scrollbar,
 .desk::-webkit-scrollbar,
-.magazine::-webkit-scrollbar,
-.raw-list::-webkit-scrollbar,
-.empty::-webkit-scrollbar,
+.feed-scroll::-webkit-scrollbar,
 .settings::-webkit-scrollbar {
   width: 8px;
 }
 
 .rail::-webkit-scrollbar-track,
 .desk::-webkit-scrollbar-track,
-.magazine::-webkit-scrollbar-track,
-.raw-list::-webkit-scrollbar-track,
-.empty::-webkit-scrollbar-track,
+.feed-scroll::-webkit-scrollbar-track,
 .settings::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .rail::-webkit-scrollbar-thumb,
 .desk::-webkit-scrollbar-thumb,
-.magazine::-webkit-scrollbar-thumb,
-.raw-list::-webkit-scrollbar-thumb,
-.empty::-webkit-scrollbar-thumb,
+.feed-scroll::-webkit-scrollbar-thumb,
 .settings::-webkit-scrollbar-thumb {
   background: transparent;
   border-radius: 8px;
@@ -1326,9 +1489,7 @@ kbd {
 
 .rail:hover::-webkit-scrollbar-thumb,
 .desk:hover::-webkit-scrollbar-thumb,
-.magazine:hover::-webkit-scrollbar-thumb,
-.raw-list:hover::-webkit-scrollbar-thumb,
-.empty:hover::-webkit-scrollbar-thumb,
+.feed-scroll:hover::-webkit-scrollbar-thumb,
 .settings:hover::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--ink) 32%, transparent);
 }
@@ -1383,6 +1544,18 @@ kbd {
     writing-mode: horizontal-tb;
     transform: none;
     letter-spacing: 0.12em;
+  }
+
+  .cover-hed {
+    font-size: 28px;
+  }
+
+  .brief-row {
+    grid-template-columns: 14px minmax(0, 1fr);
+  }
+
+  .brief-from {
+    display: none;
   }
 
   .raw-row {
