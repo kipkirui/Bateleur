@@ -107,6 +107,51 @@ pub fn append_sent(
     Ok(fetched.and_then(|(mut batch, parts)| batch.pop().map(|message| (message, parts))))
 }
 
+pub fn append_draft(
+    account: &Account,
+    password: &str,
+    rfc822: &[u8],
+) -> Result<Option<(Message, Vec<StoredPart>, String)>, String> {
+    let mut session = login(account, password)?;
+    let folders = list_folders(&mut session, &account.id)?;
+    let drafts = folders
+        .iter()
+        .find(|f| f.canonical == "drafts")
+        .cloned()
+        .or_else(|| ensure_drafts_mailbox(&mut session, &account.id).ok());
+    let Some(drafts) = drafts else {
+        let _ = session.logout();
+        return Ok(None);
+    };
+    session
+        .append_with_flags(&drafts.imap_name, rfc822, &[Flag::Seen, Flag::Draft])
+        .map_err(friendly)?;
+    let fetched = fetch_named(&mut session, account, &drafts, 1).ok();
+    let _ = session.logout();
+    Ok(fetched.and_then(|(mut batch, parts)| {
+        batch
+            .pop()
+            .map(|message| (message, parts, drafts.imap_name.clone()))
+    }))
+}
+
+pub fn delete_uid(
+    account: &Account,
+    password: &str,
+    imap_mailbox: &str,
+    uid: u32,
+) -> Result<(), String> {
+    let mut session = login(account, password)?;
+    session.select(imap_mailbox).map_err(friendly)?;
+    let uid = uid.to_string();
+    session
+        .uid_store(&uid, "+FLAGS.SILENT (\\Deleted)")
+        .map_err(friendly)?;
+    session.expunge().map_err(friendly)?;
+    let _ = session.logout();
+    Ok(())
+}
+
 pub fn wait_inbox(account: &Account, password: &str, timeout: Duration) -> Result<(), String> {
     let mut session = login(account, password)?;
     session.select("INBOX").map_err(friendly)?;
@@ -284,6 +329,20 @@ fn ensure_sent_mailbox(session: &mut Session, account_id: &str) -> Result<MailFo
         }
     }
     Err("Could not find or create a Sent folder.".into())
+}
+
+fn ensure_drafts_mailbox(session: &mut Session, account_id: &str) -> Result<MailFolder, String> {
+    for candidate in ["Drafts", "INBOX.Drafts"] {
+        if session.create(candidate).is_ok() || session.select(candidate).is_ok() {
+            return Ok(MailFolder {
+                account_id: account_id.to_string(),
+                canonical: "drafts".into(),
+                imap_name: candidate.into(),
+                label: "Drafts".into(),
+            });
+        }
+    }
+    Err("Could not find or create a Drafts folder.".into())
 }
 
 fn fetch_named(

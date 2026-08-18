@@ -12,8 +12,8 @@ mod tls;
 mod watch;
 
 use bateleur_core::{
-    guess_servers, parse_message_ref, Account, AccountDraft, FlagChange, Mailbox, SendDraft,
-    ServerGuess,
+    guess_servers, parse_message_ref, Account, AccountDraft, FlagChange, MailFolder, Mailbox,
+    SendDraft, ServerGuess,
 };
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
@@ -415,9 +415,98 @@ async fn send_mail(state: State<'_, AppState>, draft: SendDraft) -> Result<Mailb
     let mailbox = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::persist_message(&conn, &sent, &parts)?;
+        if let Some(old) = draft.replace_id.as_deref().filter(|id| *id != sent.id) {
+            let _ = db::delete_message(&conn, old);
+        }
+        db::load_mailbox(&conn)?
+    };
+    if let Some(old) = draft.replace_id.clone().filter(|id| id != &sent.id) {
+        let _ = drop_server_draft(&state, &account, &old).await;
+    }
+    Ok(mailbox)
+}
+
+#[tauri::command]
+async fn save_mail_draft(state: State<'_, AppState>, draft: SendDraft) -> Result<Mailbox, String> {
+    let account = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::get_account(&conn, &draft.account_id)?
+    };
+    let to_write = account.clone();
+    let payload = draft.clone();
+    let (mut letter, rfc822, mut parts) =
+        tauri::async_runtime::spawn_blocking(move || smtp::stash(&to_write, &payload))
+            .await
+            .map_err(|e| e.to_string())??;
+
+    if account.kind == "imap" {
+        let password = oauth::prepare_secret(&account)?;
+        let to_append = account.clone();
+        match tauri::async_runtime::spawn_blocking(move || {
+            imap::append_draft(&to_append, &password, &rfc822)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        {
+            Ok(Some((from_imap, imap_parts, imap_name))) => {
+                letter = from_imap;
+                parts = imap_parts;
+                let conn = state.db.lock().map_err(|e| e.to_string())?;
+                let _ = db::upsert_folder(
+                    &conn,
+                    &MailFolder {
+                        account_id: account.id.clone(),
+                        canonical: "drafts".into(),
+                        imap_name,
+                        label: "Drafts".into(),
+                    },
+                );
+            }
+            Ok(None) => {}
+            Err(err) => return Err(err),
+        }
+    }
+
+    if let Some(old) = draft.replace_id.clone().filter(|id| id != &letter.id) {
+        let _ = drop_server_draft(&state, &account, &old).await;
+    }
+
+    let mailbox = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::persist_message(&conn, &letter, &parts)?;
+        if let Some(old) = draft.replace_id.as_deref().filter(|id| *id != letter.id) {
+            let _ = db::delete_message(&conn, old);
+        }
         db::load_mailbox(&conn)?
     };
     Ok(mailbox)
+}
+
+async fn drop_server_draft(
+    state: &AppState,
+    account: &Account,
+    message_id: &str,
+) -> Result<(), String> {
+    if account.kind != "imap" {
+        return Ok(());
+    }
+    let Ok((folder, uid)) = parse_message_ref(&account.id, message_id) else {
+        return Ok(());
+    };
+    if folder != "drafts" {
+        return Ok(());
+    }
+    let imap_name = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::imap_name_for_folder(&conn, &account.id, "drafts").unwrap_or_else(|_| "Drafts".into())
+    };
+    let password = oauth::prepare_secret(account)?;
+    let to_run = account.clone();
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        imap::delete_uid(&to_run, &password, &imap_name, uid)
+    })
+    .await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -813,6 +902,7 @@ pub fn run() {
             save_oauth_clients,
             sync_account,
             send_mail,
+            save_mail_draft,
             set_flag,
             archive_message,
             inline_parts,

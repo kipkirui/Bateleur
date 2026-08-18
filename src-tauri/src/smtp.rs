@@ -1,5 +1,6 @@
 use crate::attach::{self, StoredPart};
 use bateleur_core::{preview_text, Account, Message, SendDraft};
+use lettre::address::Envelope;
 use lettre::message::{header::ContentType, Attachment, Mailbox, MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::{Credentials, Mechanism};
 use lettre::transport::smtp::client::{Tls, TlsParameters};
@@ -10,6 +11,13 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
     if !draft.confirm {
         return Err("Send is confirm-gated. Confirm the letter before it goes out.".into());
     }
+    if draft.to.trim().is_empty() {
+        return Err("To needs at least one address.".into());
+    }
+    if draft.body.trim().is_empty() {
+        return Err("The letter is empty.".into());
+    }
+    let (message, email, parts) = write_letter(account, draft, "sent")?;
     let host = account
         .smtp_host
         .as_deref()
@@ -35,18 +43,28 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
     } else {
         password.chars().filter(|c| !c.is_whitespace()).collect()
     };
+    let creds = Credentials::new(user.to_string(), secret);
+    let mailer = transport(&host, port, account.trust_tls, creds, oauth)?;
+    mailer.send(&email).map_err(friendly)?;
+    Ok((message, email.formatted(), parts))
+}
 
+pub fn write_letter(
+    account: &Account,
+    draft: &SendDraft,
+    folder: &str,
+) -> Result<(Message, SmtpMessage, Vec<StoredPart>), String> {
     let from = mailbox_addr(Some(&account.label), &account.address)?;
-    let recipients = parse_recipients(&draft.to)?;
+    let recipients = parse_address_list(&draft.to, "To")?;
+    if folder == "sent" && recipients.is_empty() {
+        return Err("To needs at least one address.".into());
+    }
     let cc = parse_address_list(&draft.cc, "Cc")?;
     let bcc = parse_address_list(&draft.bcc, "Bcc")?;
     let subject = draft.subject.trim();
     let body = draft.body.trim_end().to_string();
-    if body.trim().is_empty() {
-        return Err("The letter is empty.".into());
-    }
-
-    let local_id = format!("sent:{}:{}", account.id, uuid::Uuid::new_v4());
+    let prefix = if folder == "drafts" { "draft" } else { "sent" };
+    let local_id = format!("{prefix}:{}:{}", account.id, uuid::Uuid::new_v4());
     let rfc_id = format!("{}@bateleur", uuid::Uuid::new_v4());
     let mut builder = SmtpMessage::builder().from(from.clone());
     for rcpt in &recipients {
@@ -57,6 +75,12 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
     }
     for rcpt in &bcc {
         builder = builder.bcc(rcpt.clone());
+    }
+    if recipients.is_empty() && cc.is_empty() && bcc.is_empty() {
+        builder = builder.envelope(
+            Envelope::new(Some(from.email.clone()), vec![from.email.clone()])
+                .map_err(|e| e.to_string())?,
+        );
     }
     builder = builder
         .subject(if subject.is_empty() {
@@ -88,12 +112,6 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
         .filter(|h| !h.is_empty() && looks_like_markup(h));
     let parts = attach::from_draft(&local_id, &draft.attachments)?;
     let email = build_letter(builder, &body, html, &parts)?;
-
-    let creds = Credentials::new(user.to_string(), secret);
-    let mailer = transport(&host, port, account.trust_tls, creds, oauth)?;
-    mailer.send(&email).map_err(friendly)?;
-    let rfc822 = email.formatted();
-
     let to_line = recipients
         .iter()
         .map(|m| m.email.to_string())
@@ -117,7 +135,7 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
         unread: false,
         waiting_on: false,
         flagged: false,
-        folder: "sent".into(),
+        folder: folder.to_string(),
         hero: None,
         attachments: parts.iter().map(|p| p.meta.clone()).collect(),
         category: None,
@@ -138,7 +156,24 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
             .map(ToString::to_string),
         invite: None,
     };
-    Ok((message, rfc822, parts))
+    Ok((message, email, parts))
+}
+
+pub fn stash(
+    account: &Account,
+    draft: &SendDraft,
+) -> Result<(Message, Vec<u8>, Vec<StoredPart>), String> {
+    let empty = draft.to.trim().is_empty()
+        && draft.cc.trim().is_empty()
+        && draft.bcc.trim().is_empty()
+        && draft.subject.trim().is_empty()
+        && draft.body.trim().is_empty()
+        && draft.attachments.is_empty();
+    if empty {
+        return Err("Nothing to save.".into());
+    }
+    let (message, email, parts) = write_letter(account, draft, "drafts")?;
+    Ok((message, email.formatted(), parts))
 }
 
 fn build_letter(
@@ -233,14 +268,6 @@ fn wrap_html(html: &str) -> String {
             "<!doctype html><html><body style=\"font-family: Georgia, serif; font-size: 16px; line-height: 1.5; color: #1c1917;\">{html}</body></html>"
         )
     }
-}
-
-fn parse_recipients(to: &str) -> Result<Vec<Mailbox>, String> {
-    let out = parse_address_list(to, "To")?;
-    if out.is_empty() {
-        return Err("To needs at least one address.".into());
-    }
-    Ok(out)
 }
 
 fn parse_address_list(value: &str, field: &str) -> Result<Vec<Mailbox>, String> {

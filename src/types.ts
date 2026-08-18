@@ -116,6 +116,7 @@ export type SendDraft = {
   html?: string | null;
   attachments?: DraftAttachment[];
   inReplyTo?: string | null;
+  replaceId?: string | null;
 };
 
 export type DraftAttachment = {

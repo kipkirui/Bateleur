@@ -108,6 +108,14 @@ export async function removeAccount(accountId: string): Promise<Mailbox> {
   return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, null);
 }
 
+export async function saveMailDraft(draft: SendDraft): Promise<Mailbox> {
+  if (!isTauri()) {
+    throw new Error("Saving a draft needs the desktop app.");
+  }
+  const mailbox = await invoke<Mailbox>("save_mail_draft", { draft });
+  return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, draft.accountId);
+}
+
 export async function sendMail(draft: SendDraft): Promise<Mailbox> {
   if (!isTauri()) {
     throw new Error("Send needs the desktop app.");

@@ -166,6 +166,8 @@ pub struct SendDraft {
     pub bcc: String,
     #[serde(default)]
     pub in_reply_to: Option<String>,
+    #[serde(default)]
+    pub replace_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -197,9 +199,9 @@ pub fn waiting_count(mailbox: &Mailbox, account_id: Option<&str>) -> usize {
 
 /// Split `{account}:{folder}:{uid}` where `folder` may contain colons (`custom:Work`).
 pub fn parse_message_ref(account_id: &str, message_id: &str) -> Result<(String, u32), String> {
-    if message_id.starts_with("sent:") {
+    if message_id.starts_with("sent:") || message_id.starts_with("draft:") {
         return Err(
-            "This Sent copy is local-only. Sync the mailbox to change flags on the server.".into(),
+            "This copy is local-only. Sync the mailbox to change flags on the server.".into(),
         );
     }
     let prefix = format!("{account_id}:");
@@ -233,7 +235,8 @@ mod tests {
     }
 
     #[test]
-    fn message_ref_rejects_local_sent() {
+    fn message_ref_rejects_local_copies() {
         assert!(parse_message_ref("acc", "sent:acc:deadbeef").is_err());
+        assert!(parse_message_ref("acc", "draft:acc:deadbeef").is_err());
     }
 }

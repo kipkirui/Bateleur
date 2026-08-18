@@ -30,8 +30,10 @@ type Props = {
   onFiles: (files: DraftAttachment[]) => void;
   quote: ComposeQuote | null;
   busy: boolean;
+  saving?: boolean;
   error: string | null;
   onClose: () => void;
+  onSave: () => void;
   onSend: () => void;
 };
 
@@ -54,8 +56,10 @@ export function Compose({
   onFiles,
   quote,
   busy,
+  saving = false,
   error,
   onClose,
+  onSave,
   onSend,
 }: Props) {
   const [confirming, setConfirming] = useState(false);
@@ -65,9 +69,19 @@ export function Compose({
   const [draftBody, setDraftBody] = useState("");
   const [showCc, setShowCc] = useState(() => cc.trim().length > 0);
   const [showBcc, setShowBcc] = useState(() => bcc.trim().length > 0);
+  const locked = busy || saving;
   const hasBody = readableText(body).length > 0;
+  const canSave =
+    accounts.length > 0 &&
+    !locked &&
+    (to.trim().length > 0 ||
+      cc.trim().length > 0 ||
+      bcc.trim().length > 0 ||
+      subject.trim().length > 0 ||
+      hasBody ||
+      files.length > 0);
   const canSend =
-    accounts.length > 0 && to.trim().length > 0 && hasBody && !busy;
+    accounts.length > 0 && to.trim().length > 0 && hasBody && !locked;
 
   useEffect(() => {
     if (cc.trim()) setShowCc(true);
@@ -185,7 +199,7 @@ export function Compose({
         <LetterEditor
           value={body}
           onChange={onBody}
-          disabled={busy}
+          disabled={locked}
           snippets={snippets}
         />
         {quote ? (
@@ -201,7 +215,7 @@ export function Compose({
               type="file"
               multiple
               hidden
-              disabled={busy}
+              disabled={locked}
               onChange={(e) => {
                 const list = e.target.files;
                 e.target.value = "";
@@ -216,7 +230,7 @@ export function Compose({
               <button
                 type="button"
                 className="text-btn"
-                disabled={busy}
+                disabled={locked}
                 onClick={() => onFiles(files.filter((_, i) => i !== index))}
               >
                 Remove
@@ -263,6 +277,15 @@ export function Compose({
         <footer>
           <button type="button" className="text-btn" onClick={onClose}>
             Discard
+          </button>
+          <button
+            type="button"
+            className="text-btn"
+            disabled={!canSave}
+            title="Ctrl+S"
+            onClick={onSave}
+          >
+            {saving ? "Saving…" : "Save draft"}
           </button>
           <button type="submit" className="desk-cta" disabled={!canSend}>
             {busy ? "Sending…" : "Send"}

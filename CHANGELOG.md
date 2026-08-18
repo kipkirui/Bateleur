@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.22.0] - 2026-08-18
+
+### Added
+
+- **Save draft** from Compose (or Ctrl+S). IMAP APPENDs to Drafts with `\Draft`; POP keeps a local copy. Opening a draft resumes Compose, not the reader. Saving again replaces that draft. Sending a resumed draft removes it from Drafts. Close still discards unless you save
+
 ## [0.21.0] - 2026-08-18
 
 ### Added

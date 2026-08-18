@@ -8,7 +8,7 @@ Much of the original list below has shipped. Keep this note as design direction;
 
 ## Now shipped
 
-Per-sender Reading lock (move twice), **Why here?**, magazine cover / briefing / Reading digest, story stacks (pin / rename / merge / not a story), session receipts, Awaiting reply, empty Action copy, Compose Focus, collapsed quote-reply, local snippets, Ctrl+K as search + commands, undo (`z`), multi-select (`x`), FTS5 search, unified vs per-account, Reply all / Forward, Cc / Bcc, Morning Brief (eight unread Action letters; a line leaves once you read it).
+Per-sender Reading lock (move twice), **Why here?**, magazine cover / briefing / Reading digest, story stacks (pin / rename / merge / not a story), session receipts, Awaiting reply, empty Action copy, Compose Focus, collapsed quote-reply, local snippets, Ctrl+K as search + commands, undo (`z`), multi-select (`x`), FTS5 search, unified vs per-account, Reply all / Forward, Cc / Bcc, Save draft, Morning Brief (eight unread Action letters; a line leaves once you read it).
 
 ## Still open
 

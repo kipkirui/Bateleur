@@ -569,6 +569,31 @@ pub fn prune_local_sent(conn: &Connection, account_id: &str) -> Result<(), Strin
     Ok(())
 }
 
+pub fn prune_local_drafts(conn: &Connection, account_id: &str) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM messages
+         WHERE account_id = ?1 AND folder = 'drafts' AND id LIKE ?2",
+        params![account_id, format!("draft:{account_id}:%")],
+    )
+    .map_err(err)?;
+    Ok(())
+}
+
+pub fn upsert_folder(conn: &Connection, folder: &MailFolder) -> Result<(), String> {
+    conn.execute(
+        "INSERT OR REPLACE INTO folders (account_id, canonical, imap_name, label)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![
+            folder.account_id,
+            folder.canonical,
+            folder.imap_name,
+            folder.label
+        ],
+    )
+    .map_err(err)?;
+    Ok(())
+}
+
 pub fn remove_account(conn: &Connection, id: &str) -> Result<Account, String> {
     let account = get_account(conn, id)?;
     conn.execute(
@@ -725,6 +750,12 @@ pub fn apply_fetch(
         .any(|m| m.folder == "sent" && m.id.contains(":sent:"))
     {
         prune_local_sent(conn, account_id)?;
+    }
+    if messages
+        .iter()
+        .any(|m| m.folder == "drafts" && m.id.contains(":drafts:"))
+    {
+        prune_local_drafts(conn, account_id)?;
     }
     prune_orphan_attachments(conn)?;
     load_mailbox(conn)

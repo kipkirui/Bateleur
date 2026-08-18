@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadComposeAttachments, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, saveStoryOverrides, searchMail, sendMail, setFlag, setMailAlerts, staffBrief as loadStaffBrief, staffStatus as loadStaffStatus, storyOverrides as loadStoryOverrides, summarizeAccount as writeStaffBrief, syncAccount } from "./api";
+import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadComposeAttachments, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, saveMailDraft, saveStoryOverrides, searchMail, sendMail, setFlag, setMailAlerts, staffBrief as loadStaffBrief, staffStatus as loadStaffStatus, storyOverrides as loadStoryOverrides, summarizeAccount as writeStaffBrief, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -76,8 +76,10 @@ export default function App() {
   const [composeFiles, setComposeFiles] = useState<DraftAttachment[]>([]);
   const [composeQuote, setComposeQuote] = useState<ComposeQuote | null>(null);
   const [composeInReplyTo, setComposeInReplyTo] = useState<string | null>(null);
+  const [composeReplaceId, setComposeReplaceId] = useState<string | null>(null);
   const [composeHeading, setComposeHeading] = useState("New letter");
   const [sendBusy, setSendBusy] = useState(false);
+  const [draftBusy, setDraftBusy] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [canUndo, setCanUndo] = useState(false);
@@ -103,6 +105,7 @@ export default function App() {
   const pendingSend = useRef<SendDraft | null>(null);
   const pendingQuote = useRef<ComposeQuote | null>(null);
   const pendingHeading = useRef("New letter");
+  const saveDraftRef = useRef<() => void>(() => {});
   const flagUndo = useRef<FlagChange[] | null>(null);
   const undoKind = useRef<"archive" | "flag" | "send" | null>(null);
   const canUndoRef = useRef(canUndo);
@@ -361,6 +364,7 @@ export default function App() {
     setComposeFiles([]);
     setComposeQuote(null);
     setComposeInReplyTo(null);
+    setComposeReplaceId(null);
     setComposeHeading("New letter");
     setSendError(null);
     setOverlay("compose");
@@ -376,6 +380,7 @@ export default function App() {
     setComposeFromId(draft?.accountId ?? accountId ?? accounts[0]?.id ?? "");
     setComposeFiles([]);
     setComposeInReplyTo(draft?.rfcId ?? null);
+    setComposeReplaceId(null);
     setComposeHeading(draft ? "Reply" : "New letter");
     setSendError(null);
     setOverlay("compose");
@@ -392,6 +397,7 @@ export default function App() {
     setComposeFromId(message.accountId ?? accountId ?? accounts[0]?.id ?? "");
     setComposeFiles([]);
     setComposeInReplyTo(message.rfcId ?? null);
+    setComposeReplaceId(null);
     setComposeHeading("Reply all");
     setSendError(null);
     setOverlay("compose");
@@ -407,6 +413,7 @@ export default function App() {
     setComposeFromId(message.accountId ?? accountId ?? accounts[0]?.id ?? "");
     setComposeFiles([]);
     setComposeInReplyTo(null);
+    setComposeReplaceId(null);
     setComposeHeading("Forward");
     setSendError(null);
     setOverlay("compose");
@@ -416,6 +423,27 @@ export default function App() {
         /* quote-only forward if files cannot be read */
       });
   }, [accountId, accounts]);
+
+  const resumeDraft = useCallback((message: Message) => {
+    setComposeTo(message.toEmail ?? "");
+    setComposeCc(message.ccEmail ?? "");
+    setComposeBcc("");
+    setComposeSubject(message.subject === "(no subject)" ? "" : message.subject);
+    setComposeBody(toEditorHtml(message.htmlBody || message.body || ""));
+    setComposeQuote(null);
+    setComposeFromId(message.accountId);
+    setComposeFiles([]);
+    setComposeInReplyTo(message.inReplyTo ?? null);
+    setComposeReplaceId(message.id);
+    setComposeHeading("Draft");
+    setSendError(null);
+    setOverlay("compose");
+    void loadComposeAttachments(message.id)
+      .then(setComposeFiles)
+      .catch(() => {
+        /* continue without files */
+      });
+  }, []);
 
   async function writeBrief() {
     setBriefBusy(true);
@@ -489,6 +517,7 @@ export default function App() {
       html: composeBody,
       attachments: composeFiles,
       inReplyTo: composeInReplyTo,
+      replaceId: composeReplaceId,
       confirm: true,
     };
     setSendBusy(false);
@@ -508,6 +537,7 @@ export default function App() {
     setComposeFiles([]);
     setComposeQuote(null);
     setComposeInReplyTo(null);
+    setComposeReplaceId(null);
     setComposeHeading("New letter");
     setCanUndo(true);
     setToast("Sending");
@@ -527,11 +557,54 @@ export default function App() {
     setComposeFiles(draft.attachments ?? []);
     setComposeQuote(quote);
     setComposeInReplyTo(draft.inReplyTo ?? null);
+    setComposeReplaceId(draft.replaceId ?? null);
     setComposeHeading(pendingHeading.current);
     pendingQuote.current = null;
     setSendError(null);
     setOverlay("compose");
   }
+
+  async function onSaveDraft() {
+    const from = composeFromId || accountId || accounts[0]?.id;
+    if (!from) {
+      setSendError("Add a mailbox in Settings before saving a draft.");
+      return;
+    }
+    const draft: SendDraft = {
+      accountId: from,
+      to: composeTo,
+      cc: composeCc,
+      bcc: composeBcc,
+      subject: composeSubject,
+      body: readableText(composeBody),
+      html: composeBody,
+      attachments: composeFiles,
+      inReplyTo: composeInReplyTo,
+      replaceId: composeReplaceId,
+      confirm: false,
+    };
+    const sealed = { ...draft, ...withQuote(draft.html ?? "", draft.body, composeQuote) };
+    setDraftBusy(true);
+    setSendError(null);
+    try {
+      const next = await saveMailDraft(sealed);
+      setMailbox(next);
+      setOverlay("none");
+      setComposeFiles([]);
+      setComposeQuote(null);
+      setComposeReplaceId(null);
+      setFeed("drafts");
+      setAccountId(from);
+      setToast("Saved to Drafts");
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDraftBusy(false);
+    }
+  }
+  saveDraftRef.current = () => {
+    void onSaveDraft();
+  };
 
   async function commitSend() {
     window.clearTimeout(sendTimer.current);
@@ -858,6 +931,13 @@ export default function App() {
         openCompose();
         return;
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        if (overlay === "compose") {
+          e.preventDefault();
+          void saveDraftRef.current();
+        }
+        return;
+      }
       if (e.key === "Escape") {
         if (checkedIds.size > 0 && overlay === "none") {
           setCheckedIds(new Set());
@@ -885,11 +965,17 @@ export default function App() {
       if (e.key === "j") move(1);
       if (e.key === "k") move(-1);
       if (e.key === "x" && selected) toggleCheck(selected.id);
-      if (e.key === "Enter" && selected) setOverlay("reader");
+      if (e.key === "Enter" && selected) {
+        if (selected.folder === "drafts") resumeDraft(selected);
+        else setOverlay("reader");
+      }
       if (e.key === "c" || e.key === "n") openCompose();
-      if (e.key === "r" && selected) openCompose(selected);
-      if (e.key === "a" && selected) openReplyAll(selected);
-      if (e.key === "f" && selected) openForward(selected);
+      if (e.key === "r" && selected) {
+        if (selected.folder === "drafts") resumeDraft(selected);
+        else openCompose(selected);
+      }
+      if (e.key === "a" && selected && selected.folder !== "drafts") openReplyAll(selected);
+      if (e.key === "f" && selected && selected.folder !== "drafts") openForward(selected);
       if (e.key === "e") bulkArchive();
       if (e.key === "u") {
         const targets = actionTargets();
@@ -902,7 +988,7 @@ export default function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [move, openCompose, openForward, openReplyAll, overlay, selected, checkedIds, canUndo, hiddenIds, messages]);
+  }, [move, openCompose, openForward, openReplyAll, overlay, resumeDraft, selected, checkedIds, canUndo, hiddenIds, messages]);
 
   useEffect(() => {
     if (overlay !== "reader") {
@@ -983,7 +1069,7 @@ export default function App() {
       : feed === "sent"
         ? "Sent is empty. Letters you confirm-send are copied here on the server."
         : feed === "drafts"
-          ? "No drafts on the server yet."
+          ? "No drafts yet. Save from Compose, or Sync if they live on the server."
           : feed === "junk"
             ? "Junk is empty."
             : feed.startsWith("custom:")
@@ -1273,6 +1359,11 @@ export default function App() {
         onSelect={setSelectedId}
         onToggleCheck={toggleCheck}
         onOpen={(id) => {
+          const message = messages.find((item) => item.id === id);
+          if (message?.folder === "drafts") {
+            resumeDraft(message);
+            return;
+          }
           setSelectedId(id);
           setOverlay("reader");
         }}
@@ -1377,11 +1468,13 @@ export default function App() {
           onFiles={setComposeFiles}
           quote={composeQuote}
           busy={sendBusy}
+          saving={draftBusy}
           error={sendError}
           onClose={() => {
             setOverlay("none");
             setComposeFiles([]);
           }}
+          onSave={() => void onSaveDraft()}
           onSend={() => void onSend()}
         />
       ) : null}
