@@ -187,39 +187,11 @@ async fn add_account_oauth(
     .await
     .map_err(|e| e.to_string())??;
 
-    secrets::save_password(
-        &account.address,
-        &serde_json::to_string(&tokens).map_err(|e| e.to_string())?,
-    )?;
-    let password = tokens.access.clone();
-    let to_fetch = account.clone();
-    let known = if account.kind == "pop" {
-        let conn = state.db.lock().map_err(|e| e.to_string())?;
-        db::pop_uidls(&conn, &account.id).unwrap_or_default()
-    } else {
-        std::collections::HashSet::new()
-    };
-    let fetched = tauri::async_runtime::spawn_blocking(move || {
-        if to_fetch.kind == "pop" {
-            pop::fetch_account(&to_fetch, &password, &known)
-        } else {
-            imap::fetch_account(&to_fetch, &password)
-        }
-    })
-    .await
-    .map_err(|e| e.to_string())??;
-
+    oauth::store_tokens(&account.address, &tokens)?;
     let mailbox = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::upsert_account(&conn, &account)?;
-        db::apply_fetch(
-            &conn,
-            &account.id,
-            &fetched.folders,
-            &fetched.messages,
-            &fetched.parts,
-            &fetched.pop_uidls,
-        )?
+        db::load_mailbox(&conn)?
     };
     watch::start(app, account.id.clone());
     Ok(mailbox)

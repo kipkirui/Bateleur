@@ -8,6 +8,18 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.26.5] - 2026-08-18
+
+### Fixed
+
+- Sign in no longer stays on Waiting for browser after the localhost page says you are signed in. The loopback listener starts before the browser opens, ignores favicon hits, and the mailbox is saved as soon as tokens land — first fetch runs in the background like Sync
+
+## [0.26.4] - 2026-08-18
+
+### Fixed
+
+- Microsoft Sign in no longer dies on Windows Credential Manager’s 2560-character limit. The refresh token stays in the OS keychain (split across entries if needed); the short-lived access token is not stored
+
 ## [0.26.3] - 2026-08-18
 
 ### Fixed

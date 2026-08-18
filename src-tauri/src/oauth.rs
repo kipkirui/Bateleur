@@ -3,10 +3,10 @@ use bateleur_core::Account;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
-use std::net::TcpListener;
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::{mpsc, Arc};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const CLIENTS_FILE: &str = "oauth-clients.json";
 const WAIT: Duration = Duration::from_secs(3 * 60);
@@ -104,14 +104,15 @@ pub fn prepare_secret(account: &Account) -> Result<String, String> {
     if let Ok(blob) = serde_json::from_str::<TokenBlob>(&raw) {
         if blob.kind == "xoauth2" {
             let fresh = refresh_if_needed(blob)?;
-            secrets::save_password(
-                &account.address,
-                &serde_json::to_string(&fresh).map_err(|e| e.to_string())?,
-            )?;
+            store_tokens(&account.address, &fresh)?;
             return Ok(fresh.access);
         }
     }
     Ok(crate::imap::compact_secret(&raw))
+}
+
+pub fn store_tokens(address: &str, blob: &TokenBlob) -> Result<(), String> {
+    secrets::save_password(address, &persist_blob(blob)?)
 }
 
 pub fn sign_in(
@@ -145,8 +146,15 @@ pub fn sign_in(
         &state,
         login_hint,
     )?;
+    let (tx, rx) = mpsc::channel();
+    let expected = state.clone();
+    std::thread::spawn(move || {
+        let _ = tx.send(collect_code(listener, &expected));
+    });
     open_url(&url)?;
-    let code = wait_for_code(listener, &state)?;
+    let code = rx
+        .recv_timeout(WAIT)
+        .map_err(|_| "Sign-in timed out. Try again from Settings.".to_string())??;
     exchange_code(&provider, &client_id, &redirect, &code, &verifier)
 }
 
@@ -271,6 +279,19 @@ fn exchange_code(
     })
 }
 
+fn persist_blob(blob: &TokenBlob) -> Result<String, String> {
+    let slim = TokenBlob {
+        v: blob.v,
+        kind: blob.kind.clone(),
+        provider: blob.provider.clone(),
+        client_id: blob.client_id.clone(),
+        refresh: blob.refresh.clone(),
+        access: String::new(),
+        expires_at: 0,
+    };
+    serde_json::to_string(&slim).map_err(|e| e.to_string())
+}
+
 fn refresh_if_needed(mut blob: TokenBlob) -> Result<TokenBlob, String> {
     let now = now_secs();
     if blob.expires_at > now.saturating_add(120) && !blob.access.is_empty() {
@@ -309,41 +330,50 @@ fn post_token(url: &str, form: &[(&str, &str)]) -> Result<TokenResponse, String>
     }
 }
 
-fn wait_for_code(listener: TcpListener, expected_state: &str) -> Result<String, String> {
-    let (tx, rx) = mpsc::channel();
-    let expected = expected_state.to_string();
-    std::thread::spawn(move || {
-        let _ = tx.send(accept_redirect(listener, &expected));
-    });
-    rx.recv_timeout(WAIT)
-        .map_err(|_| "Sign-in timed out. Try again from Settings.".to_string())?
+fn collect_code(listener: TcpListener, expected_state: &str) -> Result<String, String> {
+    let deadline = Instant::now() + WAIT;
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err("Sign-in timed out. Try again from Settings.".into());
+        }
+        let _ = listener.set_nonblocking(false);
+        match listener.accept() {
+            Ok((stream, _)) => match take_redirect(stream, expected_state) {
+                Ok(None) => continue,
+                Ok(Some(code)) => return Ok(code),
+                Err(err) => return Err(err),
+            },
+            Err(err) => {
+                if Instant::now() >= deadline {
+                    return Err("Sign-in timed out. Try again from Settings.".into());
+                }
+                return Err(format!("OAuth redirect ({err})"));
+            }
+        }
+    }
 }
 
-fn accept_redirect(listener: TcpListener, expected_state: &str) -> Result<String, String> {
-    let (mut stream, _) = listener
-        .accept()
-        .map_err(|e| format!("OAuth redirect ({e})"))?;
+fn take_redirect(mut stream: TcpStream, expected_state: &str) -> Result<Option<String>, String> {
     let _ = stream.set_read_timeout(Some(Duration::from_secs(15)));
-    let mut buf = [0u8; 8192];
-    let n = stream.read(&mut buf).map_err(|e| e.to_string())?;
-    let req = String::from_utf8_lossy(&buf[..n]);
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
+    let req = read_http_head(&mut stream)?;
     let line = req.lines().next().unwrap_or("");
     let path = line.split_whitespace().nth(1).unwrap_or("/");
     let query = path.split_once('?').map(|(_, q)| q).unwrap_or("");
     let params = parse_query(query);
+    if params.get("error").is_none() && params.get("code").is_none() {
+        let _ = write_page(&mut stream, "Bateleur is waiting for sign-in. You can close this window.");
+        let _ = stream.shutdown(Shutdown::Both);
+        return Ok(None);
+    }
     let page = if params.get("error").is_some() {
         "Bateleur could not sign in. You can close this window."
     } else {
         "Bateleur is signed in. You can close this window."
     };
-    let body = format!(
-        "<!doctype html><html><body style=\"font-family:Segoe UI,sans-serif;padding:2rem;background:#FDFBF7;color:#1c1917\"><p>{page}</p></body></html>"
-    );
-    let _ = write!(
-        stream,
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    );
+    let _ = write_page(&mut stream, page);
+    let _ = stream.shutdown(Shutdown::Both);
     if let Some(err) = params.get("error") {
         let desc = params.get("error_description").cloned().unwrap_or_default();
         return Err(format!("Sign-in was refused ({err}). {desc}"));
@@ -357,6 +387,36 @@ fn accept_redirect(listener: TcpListener, expected_state: &str) -> Result<String
         .cloned()
         .filter(|c| !c.is_empty())
         .ok_or_else(|| "The provider did not return an authorization code.".into())
+        .map(Some)
+}
+
+fn read_http_head(stream: &mut TcpStream) -> Result<String, String> {
+    let mut data = Vec::new();
+    let mut buf = [0u8; 2048];
+    loop {
+        let n = match stream.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(err) if err.kind() == std::io::ErrorKind::TimedOut => break,
+            Err(err) => return Err(err.to_string()),
+        };
+        data.extend_from_slice(&buf[..n]);
+        if data.windows(4).any(|w| w == b"\r\n\r\n") || data.len() > 64 * 1024 {
+            break;
+        }
+    }
+    Ok(String::from_utf8_lossy(&data).into_owned())
+}
+
+fn write_page(stream: &mut TcpStream, page: &str) -> std::io::Result<()> {
+    let body = format!(
+        "<!doctype html><html><body style=\"font-family:Segoe UI,sans-serif;padding:2rem;background:#FDFBF7;color:#1c1917\"><p>{page}</p></body></html>"
+    );
+    write!(
+        stream,
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )
 }
 
 fn parse_query(query: &str) -> std::collections::HashMap<String, String> {
@@ -458,5 +518,24 @@ mod tests {
     fn microsoft_loopback_matches_azure_localhost() {
         assert_eq!(loopback_redirect("microsoft", 54321), "http://localhost:54321");
         assert_eq!(loopback_redirect("google", 9), "http://127.0.0.1:9/");
+    }
+
+    #[test]
+    fn persist_blob_drops_access_token() {
+        let blob = TokenBlob {
+            v: 1,
+            kind: "xoauth2".into(),
+            provider: "microsoft".into(),
+            client_id: "id".into(),
+            refresh: "refresh-token".into(),
+            access: "very-long-access-jwt".into(),
+            expires_at: 99,
+        };
+        let raw = persist_blob(&blob).unwrap();
+        assert!(!raw.contains("very-long-access-jwt"));
+        let loaded: TokenBlob = serde_json::from_str(&raw).unwrap();
+        assert_eq!(loaded.refresh, "refresh-token");
+        assert!(loaded.access.is_empty());
+        assert_eq!(loaded.expires_at, 0);
     }
 }

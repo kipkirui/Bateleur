@@ -5,14 +5,36 @@ use keyring::Entry;
 const SERVICE: &str = "bateleur.imap";
 const STAFF_SERVICE: &str = "bateleur.staff";
 const STAFF_USER: &str = "byok";
+/// Windows CredWrite blob is 2560 bytes. keyring stores passwords as UTF-16,
+/// so the max is 1280 code units. Stay under that per entry.
+const CHUNK_MAX: usize = 1200;
+const CHUNK_MARK: &str = "bateleur.chunks:";
+const CHUNK_PARTS: usize = 16;
 
 pub fn save_password(address: &str, password: &str) -> Result<(), String> {
     ensure_persistent_store()?;
-    entry(address)?.set_password(password).map_err(err)?;
+    if utf16_len(password) <= CHUNK_MAX {
+        entry(address)?.set_password(password).map_err(err)?;
+        clear_parts(address, 0)?;
+    } else {
+        let chunks = split_utf16(password, CHUNK_MAX);
+        if chunks.len() > CHUNK_PARTS {
+            return Err("That secret is too large for the OS keychain.".into());
+        }
+        entry(address)?
+            .set_password(&format!("{CHUNK_MARK}{}", chunks.len()))
+            .map_err(err)?;
+        for (index, chunk) in chunks.iter().enumerate() {
+            part_entry(address, index)?
+                .set_password(chunk)
+                .map_err(err)?;
+        }
+        clear_parts(address, chunks.len())?;
+    }
     // Open a *new* entry for the read-back. keyring's mock store keeps the secret
     // on the Entry object (EntryOnly), so round-tripping the same handle cannot
     // tell us the OS keychain actually persisted anything.
-    let readback = entry(address)?.get_password().map_err(err)?;
+    let readback = load_password(address)?;
     if readback != password {
         return Err("Password did not round-trip through the OS keychain.".into());
     }
@@ -21,7 +43,7 @@ pub fn save_password(address: &str, password: &str) -> Result<(), String> {
 
 pub fn load_password(address: &str) -> Result<String, String> {
     match entry(address)?.get_password() {
-        Ok(password) => Ok(password),
+        Ok(raw) => join_if_chunked(address, &raw),
         Err(keyring::Error::NoEntry) => match legacy_entry(address)?.get_password() {
             Ok(password) => Ok(password),
             Err(keyring::Error::NoEntry) => Err(
@@ -35,6 +57,7 @@ pub fn load_password(address: &str) -> Result<String, String> {
 }
 
 pub fn delete_password(address: &str) -> Result<(), String> {
+    let _ = clear_parts(address, 0);
     if let Ok(item) = entry(address) {
         let _ = item.delete_credential();
     }
@@ -93,6 +116,68 @@ fn entry(address: &str) -> Result<Entry, String> {
     Entry::new(SERVICE, &user_key(address)).map_err(err)
 }
 
+fn part_entry(address: &str, index: usize) -> Result<Entry, String> {
+    Entry::new(SERVICE, &format!("{}.p{index}", user_key(address))).map_err(err)
+}
+
+fn join_if_chunked(address: &str, raw: &str) -> Result<String, String> {
+    let Some(count) = chunk_count(raw) else {
+        return Ok(raw.to_string());
+    };
+    let mut out = String::new();
+    for index in 0..count {
+        match part_entry(address, index)?.get_password() {
+            Ok(part) => out.push_str(&part),
+            Err(keyring::Error::NoEntry) => {
+                return Err("The OS keychain is missing part of this mailbox secret. Sign in again from Settings.".into());
+            }
+            Err(other) => return Err(err(other)),
+        }
+    }
+    Ok(out)
+}
+
+fn chunk_count(raw: &str) -> Option<usize> {
+    let rest = raw.strip_prefix(CHUNK_MARK)?;
+    let n: usize = rest.parse().ok()?;
+    if n == 0 || n > CHUNK_PARTS {
+        return None;
+    }
+    Some(n)
+}
+
+fn split_utf16(value: &str, max: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut buf = String::new();
+    let mut len = 0;
+    for ch in value.chars() {
+        let n = ch.len_utf16();
+        if len + n > max && !buf.is_empty() {
+            out.push(std::mem::take(&mut buf));
+            len = 0;
+        }
+        buf.push(ch);
+        len += n;
+    }
+    if !buf.is_empty() {
+        out.push(buf);
+    }
+    out
+}
+
+fn clear_parts(address: &str, from: usize) -> Result<(), String> {
+    for index in from..CHUNK_PARTS {
+        if let Ok(item) = part_entry(address, index) {
+            let _ = item.delete_credential();
+        }
+    }
+    Ok(())
+}
+
+fn utf16_len(value: &str) -> usize {
+    value.encode_utf16().count()
+}
+
 /// Builds from before the Windows target-name fix used service `bateleur`
 /// and user `imap:{address}`, which maps to a target containing `:`.
 fn legacy_entry(address: &str) -> Result<Entry, String> {
@@ -118,13 +203,31 @@ mod tests {
     fn keychain_round_trips_across_entries() {
         let address = "keychain-test@bateleur.example";
         let password = "not-a-real-secret";
-        let _ = entry(address).and_then(|e| e.delete_credential().map_err(err));
+        let _ = delete_password(address);
         save_password(address, password).expect("save to OS keychain");
         let loaded = load_password(address).expect("load from a new entry");
         assert_eq!(loaded, password);
-        entry(address)
-            .unwrap()
-            .delete_credential()
-            .expect("cleanup test credential");
+        delete_password(address).expect("cleanup test credential");
+    }
+
+    #[test]
+    fn keychain_round_trips_over_windows_blob_limit() {
+        let address = "keychain-chunk-test@bateleur.example";
+        let password = "m".repeat(3000);
+        assert!(utf16_len(&password) > 2560);
+        let _ = delete_password(address);
+        save_password(address, &password).expect("save chunked secret");
+        let loaded = load_password(address).expect("load chunked secret");
+        assert_eq!(loaded, password);
+        delete_password(address).expect("cleanup chunked credential");
+    }
+
+    #[test]
+    fn utf16_chunks_join() {
+        let raw = "é".repeat(2000);
+        let parts = split_utf16(&raw, 100);
+        assert!(parts.len() > 1);
+        assert!(parts.iter().all(|p| utf16_len(p) <= 100));
+        assert_eq!(parts.concat(), raw);
     }
 }

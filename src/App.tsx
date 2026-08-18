@@ -502,7 +502,7 @@ export default function App() {
         ) ?? next.accounts[0];
       if (live) setAccountId(live.id);
       setSettingsNonce((n) => n + 1);
-      setToast("Mailbox connected");
+      setToast("Signed in. Fetching mail.");
     } catch (err) {
       setAccountError(err instanceof Error ? err.message : String(err));
     } finally {
