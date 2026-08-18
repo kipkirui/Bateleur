@@ -83,3 +83,126 @@ This isn't about boring vs. exciting, but it's the precondition for anyone exper
 | 7 | Staff/BYOK features | As already sequenced — mail should feel great *before* AI touches it |
 
 The throughline: almost everything here is achievable without AI or the "staff" layer at all — which fits the project's own stated principles (no fake data, no auto-send, no proxying inference). The "less boring" fix is mostly about giving the interface a sense of *causality* — the user does something, the app visibly responds, remembers, and moves on — rather than adding decoration on top of a static list view.
+
+# Design
+
+How Bateleur should look and read. This extends the product thesis in
+`Make Email Great Again.md` with the concrete UI direction — the goal is
+that at every point where email has a natural editorial analog, we take
+it. This is what separates the app from "Outlook with rounded corners."
+
+## Philosophy
+
+Mail is not a queue of identical rows. A receipt and a message from your
+manager are not the same weight, and the UI should stop pretending they
+are. The magazine metaphor already in the shell (paper tokens, Magazine
+vs Raw toggle) should extend past the color scheme into layout,
+typography, and information architecture — not just skin the existing
+row-based feed.
+
+## Feed: cards, not rows
+
+**Action feed.** Each item is a full card, not a row:
+- Sender avatar (initials circle, tinted with `--bg-accent`)
+- A category badge, derived from classification (`Receipt`, `Invoice`,
+  `Please reply`, …) — replaces the current dead `none` label
+- Preview line (first meaningful sentence, not the tracking-pixel
+  preheader most senders inject)
+- Inline actions on the card itself: Archive, Reply — clearing Action
+  should not require opening the message first
+- A quiet `Why here?` affordance that surfaces the classifier's reason
+  (see Classification transparency, below)
+
+**Reading feed.** Stays a compact row — avatar, sender, one-line
+subject/preview, date. Giving digest mail the same visual weight as
+Action mail would add noise, not clarity. The two-tier weight (one big
+card vs. a stack of compact rows) is what communicates priority through
+layout instead of labels alone.
+
+**Front page over flat list.** Rather than Action and Reading being two
+undifferentiated lists, the feed should read like a homepage: one lead
+item gets the full card treatment, the rest sit in a tighter "briefing"
+strip beneath it. Not everything in Action is equally urgent, and the
+layout should say so before the copy does.
+
+## Reader: article, not viewer
+
+Opening a message should feel like opening a post, not a raw MIME dump:
+- Byline: avatar, sender name, **send frequency** ("emails you ~1x/month"
+  — a small, honest signal of legitimacy that costs nothing to compute
+  from send history already in SQLite), timestamp, category badge
+- Serif headline (`--font-voice`) instead of the subject line rendered
+  as plain UI text
+- **Reading time estimate** under the headline (word count / average
+  reading speed — trivial to compute, meaningfully useful on long
+  newsletters)
+- **Pull-quote lede** — the first meaningful sentence rendered as a
+  blockquote, the way a magazine article opens with its strongest line
+- Body copy in `--font-voice` at 15–16px, 1.7 line-height
+- Footer actions (Archive, Reply, Plain text toggle)
+- **"More from this sender"** rail — recent messages from the same
+  address, the way an article ends with related posts
+
+## Classification transparency
+
+The Action/Reading split is the core editorial claim of the app ("you
+are the editor"), so it has to show its work or it's just an opaque spam
+filter with better branding.
+- `Why here?` on every Action card opens a one-line explanation: which
+  signal fired (deadline phrase, sender not in contacts, invoice
+  pattern, …)
+- Per-sender correction should stick: if a user moves a sender from
+  Action to Reading twice, stop guessing Action for that sender without
+  being told again
+
+## Sender pages
+
+Clicking a sender name should not just filter the feed — it should land
+on something closer to an author page: every message from them, their
+send frequency, and a mute/unsubscribe action right there. This turns
+"who's emailing me" from metadata into something manageable, the way
+you'd manage a blog subscription rather than dig through a contact list.
+
+## Long threads: table of contents
+
+A thread with a dozen+ replies should render with numbered sections and
+jump links — the way a long article gets headers — instead of a scroll
+of nested quote blocks. Story grouping (see `STATUS.md` pending list:
+pin / rename / merge stories) is the natural backend for this; the TOC
+is the reader-facing payoff.
+
+## Archive as back issues
+
+The archive/history view should read like a "previously read" shelf —
+chronological, with the same headline treatment as the live feed — not
+a folder tree. Revisiting old mail should feel like browsing back
+issues, not digging through Sent/Archive folders.
+
+## Highlights (future)
+
+Selecting text in a message and saving it to a lightweight clippings
+list (confirmation numbers, addresses, dates) gives mail a "keep this"
+affordance the way blogs and read-later apps do, without building a
+full notes product on top.
+
+## Non-goals
+
+Consistent with `STATUS.md`'s "deliberately out of scope": no fake
+engagement mechanics (read counts, streaks, unlockables). Reading time
+and send frequency are informational, not gamified — they should read
+as quiet facts, not achievements. No auto-send in this layer either;
+inline card actions (Archive, Reply) still open the existing
+confirm-gated send flow.
+
+## Implementation notes
+
+- Card and reader layouts are additive to the existing shell (rail +
+  feed + reader), not a rewrite — `Magazine` view gains the card/article
+  treatment; `Raw` view stays as the escape hatch to plain MIME.
+- Category badges, reading time, and send frequency are all derivable
+  from data already being cached (classification heuristics, MIME word
+  count, per-sender message history in SQLite) — no new sync surface
+  required.
+- `Why here?` and sender pages both read from the same classification
+  metadata; store the matched signal(s) alongside the Action/Reading
+  label at classify time rather than recomputing on click.

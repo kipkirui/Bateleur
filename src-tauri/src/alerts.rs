@@ -84,6 +84,8 @@ mod tests {
             folder: "inbox".into(),
             hero: None,
             attachments: Vec::new(),
+            category: None,
+            why: None,
         }
     }
 

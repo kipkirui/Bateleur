@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, mailAlerts as loadMailAlerts, removeAccount, sendMail, setFlag, setMailAlerts, syncAccount } from "./api";
+import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, sendMail, setFlag, setMailAlerts, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -9,13 +9,14 @@ import { Feed } from "./components/Feed";
 import { Rail } from "./components/Rail";
 import { Reader } from "./components/Reader";
 import { Settings } from "./components/Settings";
+import { SenderPage } from "./components/SenderPage";
 import { StaffModal } from "./components/StaffModal";
 import type { AccountDraft, DraftAttachment, FeedId, Mailbox, Message, ReaderMode, SyncStatus } from "./types";
 import type { MailTo } from "./lib/links";
 import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
 import "./styles.css";
 
-type Overlay = "none" | "reader" | "compose" | "settings" | "staff";
+type Overlay = "none" | "reader" | "compose" | "settings" | "staff" | "sender";
 
 function waitingFor(messages: Message[], accountId: string | null): number {
   return messages.filter((m) => {
@@ -33,6 +34,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<Overlay>("none");
+  const [senderEmail, setSenderEmail] = useState<string | null>(null);
   const [deskOpen, setDeskOpen] = useState(false);
   const [theme, setTheme] = useState<"day" | "night">("day");
   const [remoteImages, setRemoteImages] = useState(loadRemoteImagesPref);
@@ -121,7 +123,7 @@ export default function App() {
   }, [messages, accountId, feed, query]);
 
   const selected =
-    visible.find((m) => m.id === selectedId) ?? visible[0] ?? null;
+    messages.find((m) => m.id === selectedId) ?? visible[0] ?? null;
 
   useEffect(() => {
     if (selected && selected.id !== selectedId) {
@@ -279,11 +281,26 @@ export default function App() {
     try {
       const next = await archiveMessage(message.accountId, message.id);
       setMailbox(next);
-      setOverlay("none");
+      if (overlay === "reader") setOverlay("none");
       setToast("Archived");
     } catch (err) {
       setToast(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  async function onReading(message: Message) {
+    try {
+      const next = await moveToReading(message.id);
+      setMailbox(next);
+      setToast("Moved to Reading");
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function openSender(message: Message) {
+    setSenderEmail(message.fromEmail);
+    setOverlay("sender");
   }
 
   const move = useCallback(
@@ -320,7 +337,7 @@ export default function App() {
         return;
       }
       if (typing) return;
-      if (overlay === "compose" || overlay === "settings" || overlay === "staff") {
+      if (overlay === "compose" || overlay === "settings" || overlay === "staff" || overlay === "sender") {
         return;
       }
       if (e.key === "j") move(1);
@@ -367,7 +384,9 @@ export default function App() {
             ? "Junk is empty."
             : feed.startsWith("custom:")
               ? "Nothing in this folder."
-              : query.startsWith("/")
+              : feed === "action"
+                ? "Nothing needs you right now."
+                : query.startsWith("/")
                 ? "Staff is off. Commands need a key — Hire staff."
                 : "Nothing in this feed.";
 
@@ -398,10 +417,18 @@ export default function App() {
         onCommandHint={() => setToast("Staff is off — Hire staff to paste a key")}
         searchRef={searchRef}
         mode={mode}
+        feed={feed}
         messages={visible}
         selectedId={selected?.id ?? null}
         onSelect={setSelectedId}
-        onOpen={() => setOverlay("reader")}
+        onOpen={(id) => {
+          setSelectedId(id);
+          setOverlay("reader");
+        }}
+        onArchive={(message) => void onArchive(message)}
+        onReply={(message) => openCompose(message)}
+        onReading={(message) => void onReading(message)}
+        onSender={openSender}
         emptyLabel={emptyLabel}
       />
       <Desk
@@ -417,12 +444,15 @@ export default function App() {
         <Reader
           message={selected}
           account={accounts.find((a) => a.id === selected.accountId)}
+          mailbox={messages}
           onClose={() => setOverlay("none")}
           onReply={() => openCompose(selected)}
           onUnread={() => void onSetFlag(selected, { seen: false })}
           onFlag={() => void onSetFlag(selected, { flagged: !selected.flagged })}
           onArchive={() => void onArchive(selected)}
           onMailTo={openMailTo}
+          onSender={() => openSender(selected)}
+          onOpen={(id) => setSelectedId(id)}
           remoteImages={remoteImages}
           onRemoteImages={(on) => {
             setRemoteImages(on);
@@ -481,6 +511,36 @@ export default function App() {
 
       {overlay === "staff" ? (
         <StaffModal onClose={() => setOverlay("none")} />
+      ) : null}
+
+      {overlay === "sender" && senderEmail ? (
+        <SenderPage
+          email={senderEmail}
+          messages={messages.filter(
+            (m) => m.fromEmail.toLowerCase() === senderEmail.toLowerCase(),
+          )}
+          onClose={() => setOverlay("none")}
+          onOpen={(id) => {
+            setSelectedId(id);
+            setOverlay("reader");
+          }}
+          onAlwaysReading={() => {
+            void lockSenderReading(senderEmail)
+              .then((next) => {
+                setMailbox(next);
+                setToast("This sender stays in Reading");
+              })
+              .catch((err) => setToast(err instanceof Error ? err.message : String(err)));
+          }}
+          onGuessAgain={() => {
+            void resetSender(senderEmail)
+              .then((next) => {
+                setMailbox(next);
+                setToast("Guessing this sender again");
+              })
+              .catch((err) => setToast(err instanceof Error ? err.message : String(err)));
+          }}
+        />
       ) : null}
 
       {toast ? <div className="toast">{toast}</div> : null}

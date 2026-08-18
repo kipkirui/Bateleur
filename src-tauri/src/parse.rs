@@ -1,5 +1,5 @@
 use crate::attach::{self, StoredPart};
-use bateleur_core::{classify_feed, html_to_plain, preview_text, Hero, MailFolder, Message};
+use bateleur_core::{classify_mail, html_to_plain, preview_text, Hero, MailFolder, Message};
 use mail_parser::{MessageParser, PartType};
 
 pub struct FetchResult {
@@ -22,7 +22,8 @@ pub fn from_rfc822(
     let subject = html_to_plain(parsed.subject().unwrap_or("(no subject)"));
     let (body, html_body) = bodies(&parsed);
     let preview = preview_text(&body, 180);
-    let feed = classify_feed(&subject, &preview, &from_email).to_string();
+    let class = classify_mail(&subject, &preview, &from_email);
+    let feed = class.feed.to_string();
     let domain = from_email.split('@').nth(1).unwrap_or("mail");
     let hero = if feed == "reading" && folder == "inbox" {
         Some(Hero {
@@ -55,6 +56,8 @@ pub fn from_rfc822(
             folder: folder.to_string(),
             hero,
             attachments,
+            category: class.category.map(|s| s.to_string()),
+            why: Some(class.reason.to_string()),
         },
         extracted,
     ))

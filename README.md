@@ -24,7 +24,7 @@ This is a universal IMAP/POP client, not a Gmail wrapper. Add any mailbox. Mail 
 
 ## Status
 
-Early (0.9.0). You can add an IMAP or POP mailbox (app password or Sign in with Google / Microsoft), sync INBOX / Sent / Drafts / Junk (IMAP), read HTML mail as designed, send through SMTP after a second confirm (IMAP APPENDs a copy to Sent), archive / unread / flag, and open or attach files. Remote images stay off until you load them. IMAP inboxes are watched with IDLE; POP is polled. New unread mail can raise an OS toast. Staff is still open.
+Early (0.10.0). You can add an IMAP or POP mailbox (app password or Sign in with Google / Microsoft), sync INBOX / Sent / Drafts / Junk (IMAP), read HTML mail as designed, send through SMTP after a second confirm (IMAP APPENDs a copy to Sent), archive / unread / flag, and open or attach files. Remote images stay off until you load them. IMAP inboxes are watched with IDLE; POP is polled. New unread mail can raise an OS toast. Magazine view uses Action cards (with **Why here?**) and compact Reading rows. Staff is still open.
 
 Living checklist: [`STATUS.md`](./STATUS.md).  
 Product thesis: [`Make Email Great Again.md`](./Make%20Email%20Great%20Again.md).

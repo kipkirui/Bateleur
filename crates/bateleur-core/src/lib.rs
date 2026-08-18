@@ -6,7 +6,7 @@ mod folders;
 mod text;
 
 pub use autoconfig::{guess_servers, oauth_provider, ServerGuess};
-pub use classify::classify_feed;
+pub use classify::{classify_feed, classify_mail, Classification};
 pub use folders::{classify_imap_folder, ClassifiedFolder};
 pub use text::{html_to_plain, preview_text};
 
@@ -73,6 +73,10 @@ pub struct Message {
     pub hero: Option<Hero>,
     #[serde(default)]
     pub attachments: Vec<Attachment>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub why: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

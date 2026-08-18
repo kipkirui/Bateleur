@@ -8,6 +8,16 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.10.0] - 2026-08-18
+
+### Added
+
+- Magazine Action feed: lead card plus a briefing strip, category badges, lede lines, inline Archive / Reply / Reading, and **Why here?**
+- Reading stays a compact row. Empty Action says “Nothing needs you right now.”
+- Classification stores the matched signal. Move a sender to Reading twice and they stay there
+- Sender page (click the name): frequency, letters from that address, Keep in Reading / Guess again
+- Reader article treatment: send frequency, reading time, pull-quote lede, more from this sender. Raw view is unchanged
+
 ## [0.9.0] - 2026-08-18
 
 ### Added

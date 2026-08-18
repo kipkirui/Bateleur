@@ -559,6 +559,24 @@ fn set_mail_alerts(app: AppHandle, state: State<AppState>, on: bool) -> Result<b
     Ok(on)
 }
 
+#[tauri::command]
+fn move_to_reading(state: State<AppState>, message_id: String) -> Result<Mailbox, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::move_to_reading(&conn, &message_id)
+}
+
+#[tauri::command]
+fn reset_sender(state: State<AppState>, email: String) -> Result<Mailbox, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::reset_sender(&conn, &email)
+}
+
+#[tauri::command]
+fn lock_sender_reading(state: State<AppState>, email: String) -> Result<Mailbox, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::lock_sender_reading(&conn, &email)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tls::install();
@@ -591,7 +609,10 @@ pub fn run() {
             save_attachment,
             remove_account,
             mail_alerts,
-            set_mail_alerts
+            set_mail_alerts,
+            move_to_reading,
+            reset_sender,
+            lock_sender_reading
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -147,3 +147,27 @@ export async function setMailAlerts(on: boolean): Promise<boolean> {
   if (!isTauri()) return on;
   return invoke<boolean>("set_mail_alerts", { on });
 }
+
+export async function moveToReading(messageId: string): Promise<Mailbox> {
+  if (!isTauri()) {
+    throw new Error("Classification needs the desktop app.");
+  }
+  const mailbox = await invoke<Mailbox>("move_to_reading", { messageId });
+  return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, null);
+}
+
+export async function resetSender(email: string): Promise<Mailbox> {
+  if (!isTauri()) {
+    throw new Error("Classification needs the desktop app.");
+  }
+  const mailbox = await invoke<Mailbox>("reset_sender", { email });
+  return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, null);
+}
+
+export async function lockSenderReading(email: string): Promise<Mailbox> {
+  if (!isTauri()) {
+    throw new Error("Classification needs the desktop app.");
+  }
+  const mailbox = await invoke<Mailbox>("lock_sender_reading", { email });
+  return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, null);
+}

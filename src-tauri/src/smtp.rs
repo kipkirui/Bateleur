@@ -93,6 +93,8 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
         folder: "sent".into(),
         hero: None,
         attachments: parts.iter().map(|p| p.meta.clone()).collect(),
+        category: None,
+        why: None,
     };
     Ok((message, rfc822, parts))
 }

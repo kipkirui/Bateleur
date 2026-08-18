@@ -30,6 +30,8 @@ export type Message = {
   folder: string;
   hero: Hero | null;
   attachments?: Attachment[];
+  category?: string | null;
+  why?: string | null;
 };
 
 export type Attachment = {

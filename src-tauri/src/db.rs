@@ -1,5 +1,5 @@
 use crate::attach::StoredPart;
-use bateleur_core::{Account, Attachment, Hero, MailFolder, Mailbox, Message};
+use bateleur_core::{classify_mail, Account, Attachment, Hero, MailFolder, Mailbox, Message};
 use rusqlite::{params, Connection};
 use std::collections::{HashMap, HashSet};
 
@@ -64,6 +64,11 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS sender_prefs (
+            email TEXT PRIMARY KEY,
+            feed TEXT NOT NULL,
+            hits INTEGER NOT NULL DEFAULT 0
+        );
         ",
     )
     .map_err(err)?;
@@ -80,6 +85,8 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
         "ALTER TABLE accounts ADD COLUMN auth TEXT NOT NULL DEFAULT 'password'",
         [],
     );
+    let _ = conn.execute("ALTER TABLE messages ADD COLUMN category TEXT", []);
+    let _ = conn.execute("ALTER TABLE messages ADD COLUMN why TEXT", []);
     Ok(conn)
 }
 
@@ -104,7 +111,7 @@ pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
         .prepare(
             "SELECT id, account_id, feed, from_name, from_email, subject, preview, body,
                     received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body,
-                    flagged
+                    flagged, category, why
              FROM messages ORDER BY received_at DESC",
         )
         .map_err(err)?;
@@ -149,6 +156,20 @@ pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
         folders.push(row.map_err(err)?);
     }
 
+    let prefs = sender_overrides(conn)?;
+    for message in &mut messages {
+        fill_class(message);
+        if message.folder == "inbox" {
+            if let Some(feed) = prefs.get(&message.from_email.to_lowercase()) {
+                if feed == "reading" {
+                    message.feed = "reading".into();
+                    message.category = None;
+                    message.why = Some("You moved this sender to Reading twice.".into());
+                }
+            }
+        }
+    }
+
     Ok(Mailbox {
         accounts,
         messages,
@@ -188,8 +209,9 @@ pub fn upsert_message(conn: &Connection, message: &Message) -> Result<(), String
     conn.execute(
         "INSERT OR REPLACE INTO messages
          (id, account_id, feed, from_name, from_email, subject, preview, body,
-          received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body, flagged)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+          received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body, flagged,
+          category, why)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
         params![
             message.id,
             message.account_id,
@@ -207,6 +229,8 @@ pub fn upsert_message(conn: &Connection, message: &Message) -> Result<(), String
             message.hero.as_ref().map(|h| h.tone.as_str()),
             message.html_body,
             message.flagged as i64,
+            message.category,
+            message.why,
         ],
     )
     .map_err(err)?;
@@ -477,7 +501,9 @@ pub fn apply_fetch(
     pop_uidls: &[(String, String)],
 ) -> Result<Mailbox, String> {
     replace_folders(conn, account_id, folders)?;
-    for message in messages {
+    let mut classified = messages.to_vec();
+    apply_sender_prefs(conn, &mut classified)?;
+    for message in &classified {
         persist_message(conn, message, parts)?;
     }
     remember_pop_uidls(conn, account_id, pop_uidls)?;
@@ -555,6 +581,150 @@ pub fn set_pref(conn: &Connection, key: &str, value: &str) -> Result<(), String>
     Ok(())
 }
 
+fn fill_class(message: &mut Message) {
+    if message.why.is_some() || message.category.is_some() {
+        return;
+    }
+    let class = classify_mail(&message.subject, &message.preview, &message.from_email);
+    message.category = class.category.map(|s| s.to_string());
+    message.why = Some(class.reason.to_string());
+}
+
+fn sender_overrides(conn: &Connection) -> Result<HashMap<String, String>, String> {
+    let mut stmt = conn
+        .prepare("SELECT email, feed, hits FROM sender_prefs WHERE hits >= 2")
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        })
+        .map_err(err)?;
+    let mut out = HashMap::new();
+    for row in rows {
+        let (email, feed, _) = row.map_err(err)?;
+        out.insert(email.to_lowercase(), feed);
+    }
+    Ok(out)
+}
+
+fn apply_sender_prefs(conn: &Connection, messages: &mut [Message]) -> Result<(), String> {
+    let prefs = sender_overrides(conn)?;
+    for message in messages {
+        if message.folder != "inbox" {
+            continue;
+        }
+        if let Some(feed) = prefs.get(&message.from_email.to_lowercase()) {
+            if feed == "reading" {
+                message.feed = "reading".into();
+                message.category = None;
+                message.why = Some("You moved this sender to Reading twice.".into());
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn move_to_reading(conn: &Connection, message_id: &str) -> Result<Mailbox, String> {
+    let email: String = conn
+        .query_row(
+            "SELECT from_email FROM messages WHERE id = ?1",
+            [message_id],
+            |row| row.get(0),
+        )
+        .map_err(err)?;
+    let email = email.trim().to_lowercase();
+    conn.execute(
+        "UPDATE messages SET feed = 'reading', category = NULL, why = ?1 WHERE id = ?2",
+        params!["Moved to Reading.", message_id],
+    )
+    .map_err(err)?;
+    conn.execute(
+        "INSERT INTO sender_prefs (email, feed, hits) VALUES (?1, 'reading', 1)
+         ON CONFLICT(email) DO UPDATE SET hits = hits + 1, feed = 'reading'",
+        [&email],
+    )
+    .map_err(err)?;
+    let hits: i64 = conn
+        .query_row(
+            "SELECT hits FROM sender_prefs WHERE email = ?1",
+            [&email],
+            |row| row.get(0),
+        )
+        .map_err(err)?;
+    if hits >= 2 {
+        conn.execute(
+            "UPDATE messages SET feed = 'reading', category = NULL, why = ?1
+             WHERE lower(from_email) = ?2 AND folder = 'inbox'",
+            params!["You moved this sender to Reading twice.", email],
+        )
+        .map_err(err)?;
+    }
+    load_mailbox(conn)
+}
+
+pub fn lock_sender_reading(conn: &Connection, email: &str) -> Result<Mailbox, String> {
+    let email = email.trim().to_lowercase();
+    conn.execute(
+        "INSERT INTO sender_prefs (email, feed, hits) VALUES (?1, 'reading', 2)
+         ON CONFLICT(email) DO UPDATE SET hits = max(hits, 2), feed = 'reading'",
+        [&email],
+    )
+    .map_err(err)?;
+    conn.execute(
+        "UPDATE messages SET feed = 'reading', category = NULL, why = ?1
+         WHERE lower(from_email) = ?2 AND folder = 'inbox'",
+        params!["You moved this sender to Reading.", email],
+    )
+    .map_err(err)?;
+    load_mailbox(conn)
+}
+
+pub fn reset_sender(conn: &Connection, email: &str) -> Result<Mailbox, String> {
+    let email = email.trim().to_lowercase();
+    conn.execute("DELETE FROM sender_prefs WHERE email = ?1", [&email])
+        .map_err(err)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, subject, preview, from_email FROM messages
+             WHERE lower(from_email) = ?1 AND folder = 'inbox'",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([&email], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })
+        .map_err(err)?;
+    let mut updates = Vec::new();
+    for row in rows {
+        let (id, subject, preview, from_email) = row.map_err(err)?;
+        let class = classify_mail(&subject, &preview, &from_email);
+        updates.push((
+            id,
+            class.feed.to_string(),
+            class.category.map(|s| s.to_string()),
+            class.reason.to_string(),
+        ));
+    }
+    drop(stmt);
+    for (id, feed, category, why) in updates {
+        conn.execute(
+            "UPDATE messages SET feed = ?1, category = ?2, why = ?3 WHERE id = ?4",
+            params![feed, category, why, id],
+        )
+        .map_err(err)?;
+    }
+    load_mailbox(conn)
+}
+
 fn folder_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MailFolder> {
     Ok(MailFolder {
         account_id: row.get(0)?,
@@ -587,6 +757,8 @@ fn message_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
         },
         html_body: row.get(14)?,
         attachments: Vec::new(),
+        category: row.get::<_, Option<String>>(16).ok().flatten(),
+        why: row.get::<_, Option<String>>(17).ok().flatten(),
     })
 }
 
