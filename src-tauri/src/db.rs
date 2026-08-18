@@ -1,7 +1,7 @@
 use crate::attach::StoredPart;
 use bateleur_core::{Account, Attachment, Hero, MailFolder, Mailbox, Message};
 use rusqlite::{params, Connection};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub fn open(path: &std::path::Path) -> Result<Connection, String> {
     let conn = Connection::open(path).map_err(err)?;
@@ -59,6 +59,10 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
             uidl TEXT NOT NULL,
             message_id TEXT NOT NULL,
             PRIMARY KEY (account_id, uidl)
+        );
+        CREATE TABLE IF NOT EXISTS prefs (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
         );
         ",
     )
@@ -515,6 +519,39 @@ fn remember_pop_uidls(
         )
         .map_err(err)?;
     }
+    Ok(())
+}
+
+pub fn message_ids(conn: &Connection, account_id: &str) -> Result<HashSet<String>, String> {
+    let mut stmt = conn
+        .prepare("SELECT id FROM messages WHERE account_id = ?1")
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([account_id], |row| row.get::<_, String>(0))
+        .map_err(err)?;
+    let mut out = HashSet::new();
+    for row in rows {
+        out.insert(row.map_err(err)?);
+    }
+    Ok(out)
+}
+
+pub fn pref_bool(conn: &Connection, key: &str) -> Result<bool, String> {
+    match conn.query_row("SELECT value FROM prefs WHERE key = ?1", [key], |row| {
+        row.get::<_, String>(0)
+    }) {
+        Ok(value) => Ok(value != "0"),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(true),
+        Err(other) => Err(other.to_string()),
+    }
+}
+
+pub fn set_pref(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
+    conn.execute(
+        "INSERT OR REPLACE INTO prefs (key, value) VALUES (?1, ?2)",
+        params![key, value],
+    )
+    .map_err(err)?;
     Ok(())
 }
 

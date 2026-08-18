@@ -16,6 +16,8 @@ type Props = {
   removing?: boolean;
   remoteImages: boolean;
   onRemoteImages: (on: boolean) => void;
+  mailAlerts: boolean;
+  onMailAlerts: (on: boolean) => void;
 };
 
 export function Settings({
@@ -30,6 +32,8 @@ export function Settings({
   removing = false,
   remoteImages,
   onRemoteImages,
+  mailAlerts,
+  onMailAlerts,
 }: Props) {
   const [address, setAddress] = useState("");
   const [password, setPassword] = useState("");
@@ -146,6 +150,14 @@ export function Settings({
               onChange={(e) => onRemoteImages(e.target.checked)}
             />
             Load remote images in letters
+          </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={mailAlerts}
+              onChange={(e) => onMailAlerts(e.target.checked)}
+            />
+            Notify when new mail arrives
           </label>
 
           <div className="account-list">

@@ -137,3 +137,13 @@ export async function saveAttachment(id: string): Promise<string> {
   }
   return invoke<string>("save_attachment", { id });
 }
+
+export async function mailAlerts(): Promise<boolean> {
+  if (!isTauri()) return true;
+  return invoke<boolean>("mail_alerts");
+}
+
+export async function setMailAlerts(on: boolean): Promise<boolean> {
+  if (!isTauri()) return on;
+  return invoke<boolean>("set_mail_alerts", { on });
+}

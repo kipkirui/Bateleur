@@ -8,6 +8,13 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.9.0] - 2026-08-18
+
+### Added
+
+- OS alerts when new unread inbox mail arrives (Windows toast, macOS Notification Center, Linux notify). One toast per fetch, not one per letter
+- Settings checkbox **Notify when new mail arrives** (on by default). Boot and Settings → Sync do not toast the existing mailbox
+
 ## [0.8.0] - 2026-08-18
 
 ### Added

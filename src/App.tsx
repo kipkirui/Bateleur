@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, removeAccount, sendMail, setFlag, syncAccount } from "./api";
+import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, mailAlerts as loadMailAlerts, removeAccount, sendMail, setFlag, setMailAlerts, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -36,6 +36,7 @@ export default function App() {
   const [deskOpen, setDeskOpen] = useState(false);
   const [theme, setTheme] = useState<"day" | "night">("day");
   const [remoteImages, setRemoteImages] = useState(loadRemoteImagesPref);
+  const [mailAlerts, setMailAlertsOn] = useState(true);
   const [composeTo, setComposeTo] = useState("");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
@@ -66,6 +67,11 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    void loadMailAlerts().then(setMailAlertsOn).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -464,6 +470,11 @@ export default function App() {
           onRemoteImages={(on) => {
             setRemoteImages(on);
             saveRemoteImagesPref(on);
+          }}
+          mailAlerts={mailAlerts}
+          onMailAlerts={(on) => {
+            setMailAlertsOn(on);
+            void setMailAlerts(on).catch(() => {});
           }}
         />
       ) : null}

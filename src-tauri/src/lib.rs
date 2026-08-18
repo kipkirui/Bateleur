@@ -1,3 +1,4 @@
+mod alerts;
 mod attach;
 mod db;
 mod imap;
@@ -540,11 +541,30 @@ fn remove_account(
     db::load_mailbox(&conn)
 }
 
+#[tauri::command]
+fn mail_alerts(state: State<AppState>) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::pref_bool(&conn, "mail_alerts")
+}
+
+#[tauri::command]
+fn set_mail_alerts(app: AppHandle, state: State<AppState>, on: bool) -> Result<bool, String> {
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::set_pref(&conn, "mail_alerts", if on { "1" } else { "0" })?;
+    }
+    if on {
+        alerts::request(&app);
+    }
+    Ok(on)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tls::install();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
             std::fs::create_dir_all(&dir)?;
@@ -569,7 +589,9 @@ pub fn run() {
             archive_message,
             inline_parts,
             save_attachment,
-            remove_account
+            remove_account,
+            mail_alerts,
+            set_mail_alerts
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
