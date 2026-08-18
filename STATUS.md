@@ -22,7 +22,7 @@ Living checklist against the product in [`Make Email Great Again.md`](./Make%20E
 
 **Plain text and summaries.** Subjects, from-names, feed previews, and the plain-text body decode HTML entities (`&nbsp;`, `&#160;`, `&amp;`, …) and strip leftover tags (`<strong>`, `<b>`, `<bold>`, `<em>`, …). Full HTML still renders those tags (nonstandard `<bold>` is treated as `<strong>`). Cleanup runs on display for already-cached mail; **Sync** writes the cleaned preview/body into SQLite.
 
-**Not staff.** Hire staff opens a modal (provider list, key field, capability switches) and does nothing yet. Settings is mailboxes only.
+**Not staff.** Hire staff opens a modal. Provider (and a compatible endpoint URL) can be chosen; the key field and capability switches still do not run. Settings is mailboxes only.
 
 ## Pending — mail client
 

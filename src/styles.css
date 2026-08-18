@@ -1336,6 +1336,11 @@ kbd {
   padding: 8px 10px;
 }
 
+.settings select,
+.composer select {
+  cursor: pointer;
+}
+
 .secret {
   position: relative;
 }

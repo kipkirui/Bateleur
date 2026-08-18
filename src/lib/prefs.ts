@@ -33,3 +33,55 @@ export function saveComposeBleedPref(on: boolean) {
     /* ignore quota / private mode */
   }
 }
+
+export type StaffProvider =
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "openrouter"
+  | "compatible";
+
+const STAFF_PROVIDER = "bateleur.staffProvider";
+const STAFF_ENDPOINT = "bateleur.staffEndpoint";
+
+const PROVIDERS = new Set<StaffProvider>([
+  "openai",
+  "anthropic",
+  "gemini",
+  "openrouter",
+  "compatible",
+]);
+
+export function loadStaffProvider(): StaffProvider {
+  try {
+    const raw = window.localStorage.getItem(STAFF_PROVIDER);
+    if (raw && PROVIDERS.has(raw as StaffProvider)) return raw as StaffProvider;
+  } catch {
+    /* ignore */
+  }
+  return "openai";
+}
+
+export function saveStaffProvider(provider: StaffProvider) {
+  try {
+    window.localStorage.setItem(STAFF_PROVIDER, provider);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function loadStaffEndpoint(): string {
+  try {
+    return window.localStorage.getItem(STAFF_ENDPOINT) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function saveStaffEndpoint(url: string) {
+  try {
+    window.localStorage.setItem(STAFF_ENDPOINT, url);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
