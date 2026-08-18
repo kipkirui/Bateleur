@@ -33,6 +33,7 @@ export type Message = {
   category?: string | null;
   why?: string | null;
   toEmail?: string;
+  ccEmail?: string;
   rfcId?: string | null;
   inReplyTo?: string | null;
   invite?: MeetingInvite | null;

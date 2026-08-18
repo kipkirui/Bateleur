@@ -67,6 +67,7 @@ pub fn from_rfc822(
             category: class.category.map(|s| s.to_string()),
             why: Some(class.reason.to_string()),
             to_email: address_emails(parsed.to()),
+            cc_email: address_emails(parsed.cc()),
             rfc_id: clean_msgid(parsed.message_id()),
             in_reply_to: header_ids(parsed.in_reply_to()),
             invite,

@@ -82,6 +82,8 @@ pub struct Message {
     #[serde(default)]
     pub to_email: String,
     #[serde(default)]
+    pub cc_email: String,
+    #[serde(default)]
     pub rfc_id: Option<String>,
     #[serde(default)]
     pub in_reply_to: Option<String>,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, saveStoryOverrides, searchMail, sendMail, setFlag, setMailAlerts, staffBrief as loadStaffBrief, staffStatus as loadStaffStatus, storyOverrides as loadStoryOverrides, summarizeAccount as writeStaffBrief, syncAccount } from "./api";
+import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadComposeAttachments, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, saveStoryOverrides, searchMail, sendMail, setFlag, setMailAlerts, staffBrief as loadStaffBrief, staffStatus as loadStaffStatus, storyOverrides as loadStoryOverrides, summarizeAccount as writeStaffBrief, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -15,7 +15,7 @@ import { StaffModal } from "./components/StaffModal";
 import type { AccountDraft, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, StaffBrief, StaffStatus, StoryOverride, SyncStatus } from "./types";
 import type { MailTo } from "./lib/links";
 import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
-import { fromMessage, withQuote, replySubject, type ComposeQuote } from "./lib/quote";
+import { fromMessage, forwardSubject, hasReplyAll, ownAddresses, replyAllTo, replySubject, replyTo, withQuote, type ComposeQuote } from "./lib/quote";
 import {
   bumpReceipt,
   formatReceipt,
@@ -175,6 +175,7 @@ export default function App() {
 
   const messages = mailbox?.messages ?? [];
   const accounts = mailbox?.accounts ?? [];
+  const ownMail = useMemo(() => ownAddresses(accounts), [accounts]);
   const receiptLine = formatReceipt(receipt);
   const awaiting = useMemo(() => {
     const own = new Set(accounts.map((account) => account.address.toLowerCase()));
@@ -343,7 +344,7 @@ export default function App() {
   }, [accountId, accounts]);
 
   const openCompose = useCallback((draft?: Partial<Message>, letter?: string) => {
-    setComposeTo(draft?.fromEmail ?? "");
+    setComposeTo(draft ? replyTo(draft, ownMail) : "");
     setComposeSubject(draft ? replySubject(draft.subject ?? "") : "");
     setComposeBody(letter ? toEditorHtml(letter) : "");
     setComposeQuote(draft ? fromMessage(draft) : null);
@@ -351,6 +352,33 @@ export default function App() {
     setComposeFiles([]);
     setSendError(null);
     setOverlay("compose");
+  }, [accountId, accounts, ownMail]);
+
+  const openReplyAll = useCallback((message: Message) => {
+    setComposeTo(replyAllTo(message, ownMail));
+    setComposeSubject(replySubject(message.subject ?? ""));
+    setComposeBody("");
+    setComposeQuote(fromMessage(message));
+    setComposeFromId(message.accountId ?? accountId ?? accounts[0]?.id ?? "");
+    setComposeFiles([]);
+    setSendError(null);
+    setOverlay("compose");
+  }, [accountId, accounts, ownMail]);
+
+  const openForward = useCallback((message: Message) => {
+    setComposeTo("");
+    setComposeSubject(forwardSubject(message.subject ?? ""));
+    setComposeBody("");
+    setComposeQuote(fromMessage(message));
+    setComposeFromId(message.accountId ?? accountId ?? accounts[0]?.id ?? "");
+    setComposeFiles([]);
+    setSendError(null);
+    setOverlay("compose");
+    void loadComposeAttachments(message.id)
+      .then(setComposeFiles)
+      .catch(() => {
+        /* quote-only forward if files cannot be read */
+      });
   }, [accountId, accounts]);
 
   async function writeBrief() {
@@ -812,6 +840,8 @@ export default function App() {
       if (e.key === "Enter" && selected) setOverlay("reader");
       if (e.key === "c" || e.key === "n") openCompose();
       if (e.key === "r" && selected) openCompose(selected);
+      if (e.key === "a" && selected) openReplyAll(selected);
+      if (e.key === "f" && selected) openForward(selected);
       if (e.key === "e") bulkArchive();
       if (e.key === "u") {
         const targets = actionTargets();
@@ -824,7 +854,7 @@ export default function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [move, openCompose, overlay, selected, checkedIds, canUndo, hiddenIds, messages]);
+  }, [move, openCompose, openForward, openReplyAll, overlay, selected, checkedIds, canUndo, hiddenIds, messages]);
 
   useEffect(() => {
     if (overlay !== "reader") {
@@ -973,6 +1003,41 @@ export default function App() {
         openCompose();
       },
     },
+    ...(selected
+      ? [
+          {
+            id: "reply",
+            label: "Reply",
+            hint: "r",
+            run: () => {
+              setOverlay("none");
+              openCompose(selected);
+            },
+          },
+          ...(hasReplyAll(selected, ownMail)
+            ? [
+                {
+                  id: "reply-all",
+                  label: "Reply all",
+                  hint: "a",
+                  run: () => {
+                    setOverlay("none");
+                    openReplyAll(selected);
+                  },
+                },
+              ]
+            : []),
+          {
+            id: "forward",
+            label: "Forward this letter",
+            hint: "f",
+            run: () => {
+              setOverlay("none");
+              openForward(selected);
+            },
+          },
+        ]
+      : []),
     {
       id: "action",
       label: "Go to Action",
@@ -1219,6 +1284,10 @@ export default function App() {
           mailbox={messages}
           onClose={() => setOverlay("none")}
           onReply={() => openCompose(selected)}
+          onReplyAll={
+            hasReplyAll(selected, ownMail) ? () => openReplyAll(selected) : undefined
+          }
+          onForward={() => openForward(selected)}
           onUnread={() => void onSetFlag(selected, { seen: false })}
           onFlag={() => void onSetFlag(selected, { flagged: !selected.flagged })}
           onArchive={() => void onArchive(selected)}

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AccountDraft,
+  DraftAttachment,
   FlagChange,
   InlinePart,
   Mailbox,
@@ -137,6 +138,11 @@ export async function archiveMessage(
 export async function loadInlineParts(messageId: string): Promise<InlinePart[]> {
   if (!isTauri()) return [];
   return invoke<InlinePart[]>("inline_parts", { messageId });
+}
+
+export async function loadComposeAttachments(messageId: string): Promise<DraftAttachment[]> {
+  if (!isTauri()) return [];
+  return invoke<DraftAttachment[]>("compose_attachments", { messageId });
 }
 
 export async function saveAttachment(id: string): Promise<string> {

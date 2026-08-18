@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.20.0] - 2026-08-18
+
+### Added
+
+- **Reply all** and **Forward** from the reader, `a` / `f`, or Ctrl+K. Reply all fills To with From, To, and Cc except your addresses and no-reply. Forward uses `Fwd:`, an empty To, the original as a quote, and attaches original files that fit Compose (eight files, 8 MB). Reply stays the primary action. Sent-folder Reply goes to the original recipients, not yourself. Sync again to store Cc on mail that was already cached
+
 ## [0.19.0] - 2026-08-18
 
 ### Added

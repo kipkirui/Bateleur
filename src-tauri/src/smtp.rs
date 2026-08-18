@@ -96,6 +96,7 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
         category: None,
         why: None,
         to_email: to_line.to_ascii_lowercase(),
+        cc_email: String::new(),
         rfc_id: None,
         in_reply_to: None,
         invite: None,

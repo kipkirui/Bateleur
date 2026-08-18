@@ -14,6 +14,8 @@ type Props = {
   mailbox: Message[];
   onClose: () => void;
   onReply: () => void;
+  onReplyAll?: () => void;
+  onForward: () => void;
   onUnread: () => void;
   onFlag: () => void;
   onArchive: () => void;
@@ -35,6 +37,8 @@ export function Reader({
   mailbox,
   onClose,
   onReply,
+  onReplyAll,
+  onForward,
   onUnread,
   onFlag,
   onArchive,
@@ -441,6 +445,14 @@ export function Reader({
             </button>
             <button type="button" className="text-btn" onClick={onArchive}>
               Archive
+            </button>
+            {onReplyAll ? (
+              <button type="button" className="text-btn" onClick={onReplyAll}>
+                Reply all
+              </button>
+            ) : null}
+            <button type="button" className="text-btn" onClick={onForward}>
+              Forward
             </button>
           </div>
           <button type="button" className="desk-cta" onClick={onReply}>

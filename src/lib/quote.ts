@@ -1,5 +1,6 @@
 import { readableText } from "./emailHtml";
 import { formatWhen } from "./magazine";
+import { emailsIn, isNoReply } from "./waiting";
 
 export type ComposeQuote = {
   fromName: string;
@@ -14,6 +15,64 @@ export function replySubject(subject: string): string {
   const value = readableText(subject).trim();
   if (!value) return "Re:";
   return /^(re|aw|sv|antw)\s*:/i.test(value) ? value : `Re: ${value}`;
+}
+
+export function forwardSubject(subject: string): string {
+  const value = readableText(subject).trim();
+  if (!value) return "Fwd:";
+  return /^(fw|fwd|wg|rv|ref)\s*:/i.test(value) ? value : `Fwd: ${value}`;
+}
+
+function uniqueAddresses(values: string[], own: Set<string>): string[] {
+  const out: string[] = [];
+  for (const raw of values) {
+    const email = raw.trim().toLowerCase();
+    if (!email || own.has(email) || isNoReply(email) || out.includes(email)) continue;
+    out.push(email);
+  }
+  return out;
+}
+
+export function ownAddresses(accounts: { address: string }[]): Set<string> {
+  return new Set(accounts.map((account) => account.address.trim().toLowerCase()).filter(Boolean));
+}
+
+export function replyTo(
+  message: { folder?: string; fromEmail?: string; toEmail?: string },
+  own: Set<string>,
+): string {
+  if (message.folder === "sent") {
+    return uniqueAddresses(emailsIn(message.toEmail ?? ""), own)[0] ?? "";
+  }
+  const from = (message.fromEmail ?? "").trim().toLowerCase();
+  if (from && !own.has(from)) return from;
+  return uniqueAddresses(emailsIn(message.toEmail ?? ""), own)[0] ?? from;
+}
+
+export function replyAllTo(
+  message: { folder?: string; fromEmail?: string; toEmail?: string; ccEmail?: string },
+  own: Set<string>,
+): string {
+  const people = uniqueAddresses(
+    [
+      ...(message.folder === "sent" ? [] : [message.fromEmail ?? ""]),
+      ...emailsIn(message.toEmail ?? ""),
+      ...emailsIn(message.ccEmail ?? ""),
+    ],
+    own,
+  );
+  return people.join(", ");
+}
+
+export function hasReplyAll(
+  message: { folder?: string; fromEmail?: string; toEmail?: string; ccEmail?: string },
+  own: Set<string>,
+): boolean {
+  const people = replyAllTo(message, own)
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return people.length > 1;
 }
 
 export function quoteHeading(quote: ComposeQuote): string {

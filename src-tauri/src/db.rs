@@ -1,8 +1,9 @@
-use crate::attach::StoredPart;
+use crate::attach::{StoredPart, MAX_COMPOSE_BYTES, MAX_COMPOSE_FILES};
 use bateleur_core::{
-    classify_mail, keep_local_action, parse_ics, parse_ics_bytes, Account, Attachment, Hero,
-    MailFolder, Mailbox, Message,
+    classify_mail, keep_local_action, parse_ics, parse_ics_bytes, Account, Attachment,
+    DraftAttachment, Hero, MailFolder, Mailbox, Message,
 };
+use base64::Engine;
 use rusqlite::{params, Connection};
 use std::collections::{HashMap, HashSet};
 
@@ -104,6 +105,10 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
     );
     let _ = conn.execute("ALTER TABLE messages ADD COLUMN rfc_id TEXT", []);
     let _ = conn.execute("ALTER TABLE messages ADD COLUMN in_reply_to TEXT", []);
+    let _ = conn.execute(
+        "ALTER TABLE messages ADD COLUMN cc_email TEXT NOT NULL DEFAULT ''",
+        [],
+    );
     ensure_fts(&conn)?;
     Ok(conn)
 }
@@ -129,7 +134,7 @@ pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
         .prepare(
             "SELECT id, account_id, feed, from_name, from_email, subject, preview, body,
                     received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body,
-                    flagged, category, why, to_email, rfc_id, in_reply_to
+                    flagged, category, why, to_email, rfc_id, in_reply_to, cc_email
              FROM messages ORDER BY received_at DESC",
         )
         .map_err(err)?;
@@ -199,7 +204,7 @@ pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
 
 const MESSAGE_SELECT: &str = "SELECT id, account_id, feed, from_name, from_email, subject, preview, body,
                 received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body,
-                flagged, category, why, to_email, rfc_id, in_reply_to
+                flagged, category, why, to_email, rfc_id, in_reply_to, cc_email
          FROM messages";
 
 pub fn get_message(conn: &Connection, id: &str) -> Result<Message, String> {
@@ -359,8 +364,8 @@ pub fn upsert_message(conn: &Connection, message: &Message) -> Result<(), String
         "INSERT OR REPLACE INTO messages
          (id, account_id, feed, from_name, from_email, subject, preview, body,
           received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body, flagged,
-          category, why, to_email, rfc_id, in_reply_to)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+          category, why, to_email, rfc_id, in_reply_to, cc_email)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
         params![
             message.id,
             message.account_id,
@@ -383,6 +388,7 @@ pub fn upsert_message(conn: &Connection, message: &Message) -> Result<(), String
             message.to_email,
             message.rfc_id,
             message.in_reply_to,
+            message.cc_email,
         ],
     )
     .map_err(err)?;
@@ -505,6 +511,50 @@ pub fn inline_parts(
     let mut out = Vec::new();
     for row in rows {
         out.push(row.map_err(err)?);
+    }
+    Ok(out)
+}
+
+pub fn compose_attachments(
+    conn: &Connection,
+    message_id: &str,
+) -> Result<Vec<DraftAttachment>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT filename, content_type, bytes FROM attachments
+             WHERE message_id = ?1 AND inline = 0 AND stored = 1 AND length(bytes) > 0
+             ORDER BY filename",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([message_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Vec<u8>>(2)?,
+            ))
+        })
+        .map_err(err)?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (filename, content_type, bytes) = row.map_err(err)?;
+        if bytes.len() > MAX_COMPOSE_BYTES {
+            continue;
+        }
+        if out.len() >= MAX_COMPOSE_FILES {
+            break;
+        }
+        let mime = if content_type.trim().is_empty() {
+            "application/octet-stream"
+        } else {
+            content_type.trim()
+        };
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        out.push(DraftAttachment {
+            filename,
+            content_type: mime.to_string(),
+            data: format!("data:{mime};base64,{b64}"),
+        });
     }
     Ok(out)
 }
@@ -1194,10 +1244,11 @@ fn message_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
         why: row.get::<_, Option<String>>(17).ok().flatten(),
         to_email: row.get::<_, String>(18).unwrap_or_default(),
         rfc_id: row.get::<_, Option<String>>(19).ok().flatten(),
-            in_reply_to: row.get::<_, Option<String>>(20).ok().flatten(),
-            invite: None,
-        })
-    }
+        in_reply_to: row.get::<_, Option<String>>(20).ok().flatten(),
+        cc_email: row.get::<_, String>(21).unwrap_or_default(),
+        invite: None,
+    })
+}
 
 fn attachment_meta_from_row(
     row: &rusqlite::Row<'_>,

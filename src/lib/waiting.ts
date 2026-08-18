@@ -38,7 +38,7 @@ export function emailsIn(value: string): string[] {
   return out;
 }
 
-function isNoReply(email: string): boolean {
+export function isNoReply(email: string): boolean {
   const local = email.split("@")[0] ?? "";
   return NOREPLY.test(local);
 }

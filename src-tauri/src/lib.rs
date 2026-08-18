@@ -525,6 +525,15 @@ fn inline_parts(state: State<AppState>, message_id: String) -> Result<Vec<Inline
 }
 
 #[tauri::command]
+fn compose_attachments(
+    state: State<AppState>,
+    message_id: String,
+) -> Result<Vec<bateleur_core::DraftAttachment>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::compose_attachments(&conn, &message_id)
+}
+
+#[tauri::command]
 fn save_attachment(state: State<AppState>, id: String) -> Result<String, String> {
     let (filename, _content_type, bytes, stored) = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
@@ -807,6 +816,7 @@ pub fn run() {
             set_flag,
             archive_message,
             inline_parts,
+            compose_attachments,
             save_attachment,
             open_invite,
             remove_account,
