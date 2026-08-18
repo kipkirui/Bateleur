@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.26.3] - 2026-08-18
+
+### Fixed
+
+- Sign in with Microsoft (and Google) exchanges the auth code using the same TLS roots as mail — OS store plus Mozilla — so Windows / corporate CAs are trusted. The browser step already worked; the token host was the one that failed with UnknownIssuer
+
 ## [0.26.2] - 2026-08-18
 
 ### Fixed

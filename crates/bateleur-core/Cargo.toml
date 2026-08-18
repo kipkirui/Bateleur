@@ -1,6 +1,6 @@
 [package]
 name = "bateleur-core"
-version = "0.26.2"
+version = "0.26.3"
 edition = "2021"
 description = "Shared mail, cache, and staff types. Desktop and future mobile shells depend on this crate — not on a vendor mail API."
 authors = ["Kipkirui"]

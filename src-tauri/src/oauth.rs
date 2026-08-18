@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::Path;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const CLIENTS_FILE: &str = "oauth-clients.json";
@@ -291,7 +291,13 @@ fn refresh_if_needed(mut blob: TokenBlob) -> Result<TokenBlob, String> {
 }
 
 fn post_token(url: &str, form: &[(&str, &str)]) -> Result<TokenResponse, String> {
-    match ureq::post(url).send_form(form) {
+    let mut tls = crate::tls::client_config(false)?;
+    tls.alpn_protocols = vec![b"http/1.1".to_vec()];
+    let agent = ureq::AgentBuilder::new()
+        .timeout(Duration::from_secs(45))
+        .tls_config(Arc::new(tls))
+        .build();
+    match agent.post(url).send_form(form) {
         Ok(resp) => resp.into_json().map_err(|e| format!("OAuth token JSON ({e})")),
         Err(ureq::Error::Status(code, resp)) => {
             let body = resp.into_string().unwrap_or_default();
