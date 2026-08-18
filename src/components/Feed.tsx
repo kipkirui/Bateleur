@@ -1,7 +1,8 @@
 import { useState, type MouseEvent } from "react";
 import { readableText } from "../lib/emailHtml";
 import { formatWhen, lede } from "../lib/magazine";
-import { groupStories } from "../lib/stories";
+import { groupStories, type Story, type StoryDesk } from "../lib/stories";
+import { StoryTools } from "./StoryTools";
 import type { WaitingItem } from "../lib/waiting";
 import { Avatar } from "./Avatar";
 import { MorningBrief } from "./MorningBrief";
@@ -34,6 +35,7 @@ type Props = {
   briefError?: string | null;
   showBrief?: boolean;
   onWriteBrief?: () => void;
+  stories?: StoryDesk;
 };
 
 export function Feed({
@@ -63,10 +65,17 @@ export function Feed({
   briefError = null,
   showBrief = false,
   onWriteBrief,
+  stories: storyDesk,
 }: Props) {
   const checked = checkedIds.size;
   const selecting = checked > 0;
   const actionEmpty = feed === "action" && messages.length === 0;
+  const overrides = storyDesk?.overrides ?? {};
+  const grouped = groupStories(messages, overrides);
+  const filterStory = storyDesk?.filter
+    ? grouped.find((item) => item.id === storyDesk.filter) ?? grouped[0]
+    : null;
+  const tools = filterStory ? undefined : storyDesk;
 
   return (
     <section className="center">
@@ -102,6 +111,22 @@ export function Feed({
           onWrite={onWriteBrief}
           onOpen={onOpen}
         />
+      ) : null}
+
+      {filterStory && storyDesk ? (
+        <div className="story-banner">
+          <StoryTools
+            story={filterStory}
+            others={grouped}
+            onPin={storyDesk.onPin}
+            onRename={storyDesk.onRename}
+            onMerge={storyDesk.onMerge}
+            onReject={storyDesk.onReject}
+          />
+          <button type="button" className="text-btn" onClick={() => storyDesk.onFilter(null)}>
+            All mail
+          </button>
+        </div>
       ) : null}
 
       <div className="feed-scroll">
@@ -195,15 +220,17 @@ export function Feed({
             onReply={onReply}
             onReading={onReading}
             onSender={onSender}
+            storyDesk={tools}
           />
         ) : (
           <div className="magazine">
             <div className="block">
               <h2>{feedHeading(feed)}</h2>
-              {groupStories(messages).map((story) => (
+              {grouped.map((story) => (
                 <StoryTeasers
                   key={story.id}
                   story={story}
+                  others={grouped}
                   selectedId={selectedId}
                   checkedIds={checkedIds}
                   selecting={selecting}
@@ -211,6 +238,7 @@ export function Feed({
                   onToggleCheck={onToggleCheck}
                   onOpen={onOpen}
                   onSender={onSender}
+                  storyDesk={tools}
                 />
               ))}
             </div>
@@ -234,6 +262,7 @@ function ActionMagazine({
   onReply,
   onReading,
   onSender,
+  storyDesk,
 }: {
   messages: Message[];
   digest: Message[];
@@ -247,8 +276,10 @@ function ActionMagazine({
   onReply: (message: Message) => void;
   onReading: (message: Message) => void;
   onSender: (message: Message) => void;
+  storyDesk?: StoryDesk;
 }) {
-  const stories = groupStories(messages);
+  const stories = groupStories(messages, storyDesk?.overrides);
+  const digestStories = groupStories(digest, storyDesk?.overrides);
   const [cover, ...rest] = stories;
   const lead = cover?.messages[0];
   return (
@@ -256,6 +287,7 @@ function ActionMagazine({
       {lead ? (
         <div className="block">
           <h2>Cover</h2>
+          {storyDesk ? <StoryKicker story={cover} others={stories} desk={storyDesk} /> : null}
           <Cover
             message={lead}
             thread={cover.messages.length}
@@ -288,10 +320,8 @@ function ActionMagazine({
         <div className="block briefing">
           <h2>Briefing</h2>
           {rest.map((story) => (
-            <div key={story.id} className={story.messages.length > 1 ? "story-stack" : undefined}>
-              {story.messages.length > 1 ? (
-                <div className="story-kicker">{story.messages.length} letters</div>
-              ) : null}
+            <div key={story.id} className={story.messages.length > 1 || story.pinned ? "story-stack" : undefined}>
+              <StoryKicker story={story} others={stories} desk={storyDesk} />
               {story.messages.map((message) => (
                 <BriefRow
                   key={message.id}
@@ -311,10 +341,11 @@ function ActionMagazine({
       {digest.length > 0 ? (
         <div className="block">
           <h2>Reading</h2>
-          {groupStories(digest).map((story) => (
+          {digestStories.map((story) => (
             <StoryTeasers
               key={story.id}
               story={story}
+              others={digestStories}
               selectedId={selectedId}
               checkedIds={checkedIds}
               selecting={selecting}
@@ -322,6 +353,7 @@ function ActionMagazine({
               onToggleCheck={onToggleCheck}
               onOpen={onOpen}
               onSender={onSender}
+              storyDesk={storyDesk}
             />
           ))}
         </div>
@@ -509,6 +541,7 @@ function ArticleTeaser({
 
 function StoryTeasers({
   story,
+  others = [],
   selectedId,
   checkedIds,
   selecting,
@@ -516,8 +549,10 @@ function StoryTeasers({
   onToggleCheck,
   onOpen,
   onSender,
+  storyDesk,
 }: {
-  story: { id: string; messages: Message[] };
+  story: Story;
+  others?: Story[];
   selectedId: string | null;
   checkedIds: Set<string>;
   selecting: boolean;
@@ -525,14 +560,13 @@ function StoryTeasers({
   onToggleCheck: (id: string) => void;
   onOpen: (id: string) => void;
   onSender: (message: Message) => void;
+  storyDesk?: StoryDesk;
 }) {
   const [lead, ...earlier] = story.messages;
   if (!lead) return null;
   return (
-    <div className={earlier.length > 0 ? "story-stack" : undefined}>
-      {earlier.length > 0 ? (
-        <div className="story-kicker">{story.messages.length} letters</div>
-      ) : null}
+    <div className={earlier.length > 0 || story.pinned ? "story-stack" : undefined}>
+      <StoryKicker story={story} others={others} desk={storyDesk} />
       <ArticleTeaser
         message={lead}
         selected={selectedId === lead.id}
@@ -557,6 +591,34 @@ function StoryTeasers({
       ))}
     </div>
   );
+}
+
+function StoryKicker({
+  story,
+  others,
+  desk,
+}: {
+  story: Story;
+  others: Story[];
+  desk?: StoryDesk;
+}) {
+  if (desk && (story.messages.length > 1 || story.pinned || desk.overrides[story.id]?.title)) {
+    return (
+      <StoryTools
+        story={story}
+        others={others}
+        onPin={desk.onPin}
+        onRename={desk.onRename}
+        onMerge={desk.onMerge}
+        onReject={desk.onReject}
+        onOpen={() => desk.onFilter(story.id)}
+      />
+    );
+  }
+  if (story.messages.length > 1) {
+    return <div className="story-kicker">{story.messages.length} letters</div>;
+  }
+  return null;
 }
 
 function Check({ on, onToggle }: { on: boolean; onToggle: () => void }) {

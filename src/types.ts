@@ -191,3 +191,10 @@ export type StaffBrief = {
   items: StaffBriefItem[];
   at: string;
 };
+
+export type StoryOverride = {
+  title?: string;
+  pinned?: boolean;
+  rejected?: boolean;
+  mergeInto?: string | null;
+};

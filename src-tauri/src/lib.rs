@@ -689,6 +689,37 @@ async fn summarize_account(
     Ok(brief)
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct StoryOverride {
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    pinned: bool,
+    #[serde(default)]
+    rejected: bool,
+    #[serde(default)]
+    merge_into: Option<String>,
+}
+
+#[tauri::command]
+fn story_overrides(state: State<AppState>) -> Result<HashMap<String, StoryOverride>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let raw = db::pref_string(&conn, "story_overrides", "{}")?;
+    Ok(serde_json::from_str(&raw).unwrap_or_default())
+}
+
+#[tauri::command]
+fn save_story_overrides(
+    state: State<AppState>,
+    overrides: HashMap<String, StoryOverride>,
+) -> Result<HashMap<String, StoryOverride>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let raw = serde_json::to_string(&overrides).map_err(|e| e.to_string())?;
+    db::set_pref(&conn, "story_overrides", &raw)?;
+    Ok(overrides)
+}
+
 fn kick_new_mail_summaries(app: AppHandle, ids: Vec<String>) {
     if ids.is_empty() {
         return;
@@ -742,7 +773,9 @@ pub fn run() {
             summarize_mail,
             draft_reply,
             staff_brief,
-            summarize_account
+            summarize_account,
+            story_overrides,
+            save_story_overrides
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

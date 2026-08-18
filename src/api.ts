@@ -13,6 +13,7 @@ import type {
   StaffLetter,
   StaffStatus,
   StaffSummary,
+  StoryOverride,
 } from "./types";
 
 function fromParts(
@@ -242,4 +243,16 @@ export async function summarizeAccount(accountId: string | null): Promise<StaffB
     throw new Error("The Brief needs the desktop app.");
   }
   return invoke<StaffBrief>("summarize_account", { accountId });
+}
+
+export async function storyOverrides(): Promise<Record<string, StoryOverride>> {
+  if (!isTauri()) return {};
+  return invoke<Record<string, StoryOverride>>("story_overrides");
+}
+
+export async function saveStoryOverrides(
+  overrides: Record<string, StoryOverride>,
+): Promise<Record<string, StoryOverride>> {
+  if (!isTauri()) return overrides;
+  return invoke<Record<string, StoryOverride>>("save_story_overrides", { overrides });
 }

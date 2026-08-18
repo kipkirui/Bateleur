@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, searchMail, sendMail, setFlag, setMailAlerts, staffBrief as loadStaffBrief, staffStatus as loadStaffStatus, summarizeAccount as writeStaffBrief, syncAccount } from "./api";
+import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, saveStoryOverrides, searchMail, sendMail, setFlag, setMailAlerts, staffBrief as loadStaffBrief, staffStatus as loadStaffStatus, storyOverrides as loadStoryOverrides, summarizeAccount as writeStaffBrief, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -12,7 +12,7 @@ import { Settings } from "./components/Settings";
 import { SenderPage } from "./components/SenderPage";
 import { Palette, type PaletteCommand } from "./components/Palette";
 import { StaffModal } from "./components/StaffModal";
-import type { AccountDraft, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, StaffBrief, StaffStatus, SyncStatus } from "./types";
+import type { AccountDraft, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, StaffBrief, StaffStatus, StoryOverride, SyncStatus } from "./types";
 import type { MailTo } from "./lib/links";
 import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
 import { fromMessage, withQuote, replySubject, type ComposeQuote } from "./lib/quote";
@@ -25,6 +25,7 @@ import {
   type Receipt,
 } from "./lib/receipt";
 import { loadWaitingDismissed, saveWaitingDismissed, waitingItems } from "./lib/waiting";
+import { groupStories, patchOverride, railStories, type StoryDesk } from "./lib/stories";
 import { UNDO_MS, archiveLabel, flagLabel } from "./lib/undo";
 import "./styles.css";
 
@@ -80,6 +81,8 @@ export default function App() {
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
   const [receipt, setReceipt] = useState<Receipt>(loadReceipt);
   const [waitingDismissed, setWaitingDismissed] = useState(loadWaitingDismissed);
+  const [storyOverrides, setStoryOverrides] = useState<Record<string, StoryOverride>>({});
+  const [storyFilter, setStoryFilter] = useState<string | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [accountBusy, setAccountBusy] = useState(false);
   const [settingsNonce, setSettingsNonce] = useState(0);
@@ -119,6 +122,7 @@ export default function App() {
     if (!isTauri()) return;
     void loadMailAlerts().then(setMailAlertsOn).catch(() => {});
     void loadStaffStatus().then(setStaff).catch(() => {});
+    void loadStoryOverrides().then(setStoryOverrides).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -177,7 +181,32 @@ export default function App() {
     return waitingItems(scoped, waitingDismissed, own);
   }, [messages, accounts, accountId, waitingDismissed]);
 
+  const inbox = useMemo(
+    () =>
+      messages.filter((m) => {
+        if (accountId && m.accountId !== accountId) return false;
+        if (hiddenIds.has(m.id)) return false;
+        return m.folder === "inbox";
+      }),
+    [messages, accountId, hiddenIds],
+  );
+
+  const stories = useMemo(
+    () => groupStories(inbox, storyOverrides),
+    [inbox, storyOverrides],
+  );
+
+  const nextAction = useMemo(() => {
+    const unread = inbox.find((m) => m.feed === "action" && m.unread);
+    if (unread) return unread;
+    return awaiting[0]?.message ?? null;
+  }, [inbox, awaiting]);
+
   const visible = useMemo(() => {
+    if (storyFilter) {
+      const story = stories.find((item) => item.id === storyFilter);
+      return story?.messages ?? [];
+    }
     if (feed === "awaiting") {
       return awaiting
         .map((item) => item.message)
@@ -194,10 +223,10 @@ export default function App() {
       if (m.feed !== feed) return false;
       return true;
     });
-  }, [messages, accountId, feed, hiddenIds, awaiting]);
+  }, [messages, accountId, feed, hiddenIds, awaiting, storyFilter, stories]);
 
   const digest = useMemo(() => {
-    if (feed !== "action") return [];
+    if (feed !== "action" || storyFilter) return [];
     return messages
       .filter((m) => {
         if (accountId && m.accountId !== accountId) return false;
@@ -205,7 +234,44 @@ export default function App() {
         return m.folder === "inbox" && m.feed === "reading";
       })
       .slice(0, 6);
-  }, [messages, accountId, feed, hiddenIds]);
+  }, [messages, accountId, feed, hiddenIds, storyFilter]);
+
+  const persistStories = useCallback((next: Record<string, StoryOverride>) => {
+    setStoryOverrides(next);
+    void saveStoryOverrides(next).catch(() => {
+      setToast("Could not save that story.");
+    });
+  }, []);
+
+  const storyDesk = useMemo((): StoryDesk => {
+    return {
+      overrides: storyOverrides,
+      filter: storyFilter,
+      onFilter: (id) => {
+        setStoryFilter(id);
+        if (id && feed !== "action" && feed !== "reading") setFeed("action");
+      },
+      onPin: (id, on) => persistStories(patchOverride(storyOverrides, id, { pinned: on })),
+      onRename: (id, title) => persistStories(patchOverride(storyOverrides, id, { title })),
+      onMerge: (id, into) => {
+        persistStories(patchOverride(storyOverrides, id, { mergeInto: into }));
+        setStoryFilter((current) => (current === id ? into : current));
+      },
+      onReject: (id) => {
+        persistStories(
+          patchOverride(storyOverrides, id, { rejected: true, pinned: false, mergeInto: null }),
+        );
+        setStoryFilter((current) => (current === id ? null : current));
+      },
+    };
+  }, [storyOverrides, storyFilter, feed, persistStories]);
+
+  useEffect(() => {
+    if (!storyFilter) return;
+    if (!stories.some((item) => item.id === storyFilter && item.messages.length > 0)) {
+      setStoryFilter(null);
+    }
+  }, [storyFilter, stories]);
 
   useEffect(() => {
     if (overlay !== "palette") return;
@@ -855,6 +921,18 @@ export default function App() {
         if (staff.hired && staff.summarizeAccount) void writeBrief();
       },
     },
+    ...(!staff.hired
+      ? []
+      : railStories(stories).map((story) => ({
+          id: `story-${story.id}`,
+          label: `Story: ${story.title}`,
+          hint: String(story.messages.length),
+          run: () => {
+            setStoryFilter(story.id);
+            setFeed("action");
+            setOverlay("none");
+          },
+        }))),
     {
       id: "desk",
       label: "Open staff desk",
@@ -1028,6 +1106,20 @@ export default function App() {
         }}
         theme={theme}
         onTheme={() => setTheme((t) => (t === "day" ? "night" : "day"))}
+        stories={
+          staff.hired
+            ? railStories(stories).map((story) => ({
+                id: story.id,
+                title: story.title,
+                count: story.messages.length,
+              }))
+            : []
+        }
+        storyId={storyFilter}
+        onStory={(id) => {
+          setStoryFilter(id);
+          if (id && feed !== "action" && feed !== "reading") setFeed("action");
+        }}
       />
       <Feed
         onPalette={() => {
@@ -1061,8 +1153,9 @@ export default function App() {
         brief={brief}
         briefBusy={briefBusy}
         briefError={briefError}
-        showBrief={staff.hired && staff.summarizeAccount}
+        showBrief={staff.hired && staff.summarizeAccount && !storyFilter}
         onWriteBrief={() => void writeBrief()}
+        stories={staff.hired ? storyDesk : undefined}
       />
       <Desk
         open={deskOpen}
@@ -1078,6 +1171,18 @@ export default function App() {
         summarize={staff.summarize}
         summarizeAccount={staff.summarizeAccount}
         drafts={staff.drafts}
+        next={staff.hired ? nextAction : null}
+        onOpenNext={() => {
+          if (!nextAction) return;
+          setSelectedId(nextAction.id);
+          setOverlay("reader");
+        }}
+        onReplyNext={() => {
+          if (nextAction) openCompose(nextAction);
+        }}
+        onDraftNext={(body) => {
+          if (nextAction) openCompose(nextAction, body);
+        }}
       />
     </div>
 
@@ -1102,6 +1207,7 @@ export default function App() {
           staff={staff}
           onHire={() => setOverlay("staff")}
           onDraft={(body) => openCompose(selected, body)}
+          storyOverrides={storyOverrides}
         />
       ) : null}
 

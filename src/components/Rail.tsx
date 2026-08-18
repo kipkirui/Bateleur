@@ -19,6 +19,9 @@ type Props = {
   theme: "day" | "night";
   onTheme: () => void;
   sync: { label: string; hint: string } | null;
+  stories?: { id: string; title: string; count: number }[];
+  storyId?: string | null;
+  onStory?: (id: string | null) => void;
 };
 
 const FEEDS: { id: FeedId; label: string }[] = [
@@ -48,6 +51,9 @@ export function Rail({
   theme,
   onTheme,
   sync,
+  stories = [],
+  storyId = null,
+  onStory,
 }: Props) {
   return (
     <aside className="rail">
@@ -135,6 +141,25 @@ export function Rail({
           {item.label}
         </button>
       ))}
+
+      {stories.length > 0 && onStory ? (
+        <>
+          <div className="rail-label">Stories</div>
+          {stories.map((story) => (
+            <button
+              key={story.id}
+              type="button"
+              className={storyId === story.id ? "nav active" : "nav"}
+              onClick={() => onStory(storyId === story.id ? null : story.id)}
+            >
+              <span>{story.title}</span>
+              <span className="nav-meta">
+                {story.count === 1 ? "1 letter" : `${story.count} letters`}
+              </span>
+            </button>
+          ))}
+        </>
+      ) : null}
 
       <div className="rail-label">Folders</div>
       {SYSTEM_FOLDERS.map((item) => (

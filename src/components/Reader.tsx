@@ -6,7 +6,7 @@ import { threadLetters } from "../lib/stories";
 import { Avatar } from "./Avatar";
 import { Letter, letterHtml } from "./Letter";
 import type { MailTo } from "../lib/links";
-import type { Account, Attachment, InlinePart, Message, StaffStatus, StaffSummary } from "../types";
+import type { Account, Attachment, InlinePart, Message, StaffStatus, StaffSummary, StoryOverride } from "../types";
 
 type Props = {
   message: Message;
@@ -25,6 +25,7 @@ type Props = {
   staff: StaffStatus;
   onHire: () => void;
   onDraft: (body: string) => void;
+  storyOverrides?: Record<string, StoryOverride>;
 };
 
 export function Reader({
@@ -44,6 +45,7 @@ export function Reader({
   staff,
   onHire,
   onDraft,
+  storyOverrides = {},
 }: Props) {
   const html = letterHtml(message);
   const files = (message.attachments ?? []).filter((a) => !a.inline);
@@ -56,7 +58,7 @@ export function Reader({
   const [staffBusy, setStaffBusy] = useState<"summarize" | "draft" | null>(null);
   const [staffError, setStaffError] = useState<string | null>(null);
   const quote = lede(message);
-  const thread = threadLetters(mailbox, message);
+  const thread = threadLetters(mailbox, message, storyOverrides);
   const related = mailbox
     .filter(
       (m) =>

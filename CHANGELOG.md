@@ -8,6 +8,13 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.17.0] - 2026-08-18
+
+### Added
+
+- Stories can be pinned, renamed, merged, or marked not a story. The rail lists pinned or long threads only after staff is hired; magazine still stacks same-subject letters without a key
+- The Co-Pilot tab reads **Next** when there is unread Action (or an awaiting loop). Open, Reply, and Draft a reply sit on that letter. The desk stays collapsed until you open it, and it never sends
+
 ## [0.16.0] - 2026-08-18
 
 ### Added
