@@ -1,5 +1,12 @@
 import { useState } from "react";
 import { readableText } from "../lib/emailHtml";
+import { loadComposeBleedPref, saveComposeBleedPref } from "../lib/prefs";
+import { quoteHeading, type ComposeQuote } from "../lib/quote";
+import {
+  loadSnippets,
+  normalizeTrigger,
+  saveSnippets,
+} from "../lib/snippets";
 import type { Account, DraftAttachment } from "../types";
 import { ConfirmModal } from "./ConfirmModal";
 import { LetterEditor } from "./LetterEditor";
@@ -16,6 +23,7 @@ type Props = {
   onBody: (value: string) => void;
   files: DraftAttachment[];
   onFiles: (files: DraftAttachment[]) => void;
+  quote: ComposeQuote | null;
   busy: boolean;
   error: string | null;
   onClose: () => void;
@@ -34,20 +42,51 @@ export function Compose({
   onBody,
   files,
   onFiles,
+  quote,
   busy,
   error,
   onClose,
   onSend,
 }: Props) {
   const [confirming, setConfirming] = useState(false);
+  const [bleed, setBleed] = useState(loadComposeBleedPref);
+  const [snippets, setSnippets] = useState(loadSnippets);
+  const [draftTrigger, setDraftTrigger] = useState("");
+  const [draftBody, setDraftBody] = useState("");
   const hasBody = readableText(body).length > 0;
   const canSend =
     accounts.length > 0 && to.trim().length > 0 && hasBody && !busy;
 
+  function toggleBleed() {
+    const next = !bleed;
+    setBleed(next);
+    saveComposeBleedPref(next);
+  }
+
+  function addSnippet() {
+    const trigger = normalizeTrigger(draftTrigger);
+    const text = draftBody.trim();
+    if (!trigger || !text) return;
+    const next = [
+      ...snippets.filter((row) => row.trigger !== trigger),
+      { id: trigger, trigger, body: text },
+    ];
+    setSnippets(next);
+    saveSnippets(next);
+    setDraftTrigger("");
+    setDraftBody("");
+  }
+
+  function removeSnippet(id: string) {
+    const next = snippets.filter((row) => row.id !== id);
+    setSnippets(next);
+    saveSnippets(next);
+  }
+
   return (
-    <div className="overlay" role="dialog" aria-modal="true">
+    <div className={bleed ? "overlay overlay-bleed" : "overlay"} role="dialog" aria-modal="true">
       <form
-        className="composer"
+        className={bleed ? "composer composer-bleed" : "composer"}
         onSubmit={(e) => {
           e.preventDefault();
           if (!canSend) return;
@@ -55,10 +94,15 @@ export function Compose({
         }}
       >
         <header>
-          <span>New letter</span>
-          <button type="button" className="text-btn" onClick={onClose}>
-            Close
-          </button>
+          <span>{quote ? "Reply" : "New letter"}</span>
+          <span className="composer-head-actions">
+            <button type="button" className="text-btn" onClick={toggleBleed}>
+              {bleed ? "Exit focus" : "Focus"}
+            </button>
+            <button type="button" className="text-btn" onClick={onClose}>
+              Close
+            </button>
+          </span>
         </header>
         {accounts.length === 0 ? (
           <p className="muted">Add a mailbox in Settings before sending.</p>
@@ -87,7 +131,18 @@ export function Compose({
           Subject
           <input value={subject} onChange={(e) => onSubject(e.target.value)} />
         </label>
-        <LetterEditor value={body} onChange={onBody} disabled={busy} />
+        <LetterEditor
+          value={body}
+          onChange={onBody}
+          disabled={busy}
+          snippets={snippets}
+        />
+        {quote ? (
+          <details className="compose-quote">
+            <summary>{quoteHeading(quote)}</summary>
+            <blockquote>{quote.body}</blockquote>
+          </details>
+        ) : null}
         <div className="attach-compose">
           <label className="text-btn attach-picker">
             Attach
@@ -118,6 +173,41 @@ export function Compose({
             </span>
           ))}
         </div>
+        <details className="compose-snippets">
+          <summary>Snippets</summary>
+          <p className="muted">
+            Type <kbd>::thanks</kbd> or <kbd>/followup</kbd> in the letter. Stored on this
+            machine only.
+          </p>
+          <ul>
+            {snippets.map((snippet) => (
+              <li key={snippet.id}>
+                <kbd>::{snippet.trigger}</kbd>
+                <span>{snippet.body}</span>
+                <button type="button" className="text-btn" onClick={() => removeSnippet(snippet.id)}>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="snippet-add">
+            <input
+              value={draftTrigger}
+              onChange={(e) => setDraftTrigger(e.target.value)}
+              placeholder="trigger"
+              aria-label="Snippet trigger"
+            />
+            <input
+              value={draftBody}
+              onChange={(e) => setDraftBody(e.target.value)}
+              placeholder="Thanks for reaching out,"
+              aria-label="Snippet text"
+            />
+            <button type="button" className="text-btn" onClick={addSnippet}>
+              Add
+            </button>
+          </div>
+        </details>
         {error ? <p className="form-error">{error}</p> : null}
         <footer>
           <button type="button" className="text-btn" onClick={onClose}>

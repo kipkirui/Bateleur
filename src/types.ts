@@ -125,6 +125,7 @@ export type FlagChange = {
 export type FeedId =
   | "action"
   | "reading"
+  | "awaiting"
   | "sent"
   | "drafts"
   | "junk"

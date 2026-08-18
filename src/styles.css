@@ -131,14 +131,78 @@ kbd {
   color: var(--amber);
   font-size: 12px;
   margin: 0;
+}
+
+.rail-status {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
   padding-left: calc(var(--brand-mark) + var(--brand-gap));
+}
+
+.rail-stat-hint {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.await-badge {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 10px 7px 6px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--ink);
+  text-align: left;
+  width: 100%;
+}
+
+.await-badge.active {
+  border-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+}
+
+.await-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.await-label {
+  font-size: 12px;
+}
+
+.await-count {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  padding: 0 5px;
+  align-items: center;
+  justify-content: center;
+  background: var(--amber);
+  color: #fdfbf7;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+[data-theme="night"] .await-count {
+  color: #12110f;
 }
 
 .sync-status {
   color: var(--ink-soft);
-  font-size: 11px;
-  margin: 4px 0 0;
-  padding-left: calc(var(--brand-mark) + var(--brand-gap));
+  font-size: 12px;
+  margin: 0;
 }
 
 .compose {
@@ -287,6 +351,62 @@ kbd {
   color: var(--ink-soft);
   font-weight: 600;
   margin: 0 0 12px;
+}
+
+.await-lede {
+  margin: -4px 0 16px;
+  font-size: 13px;
+}
+
+.await-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.await-list li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.await-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+}
+
+.await-row.selected .await-subject {
+  color: var(--amber);
+}
+
+.await-who {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.await-why {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+.await-subject {
+  font-family: var(--font-voice);
+  font-size: 20px;
+  line-height: 1.25;
 }
 
 .action-row,
@@ -938,46 +1058,16 @@ kbd {
   align-items: stretch;
 }
 
-.desk-tab.has-wait {
-  color: var(--amber);
-}
-
-.desk-wait {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.desk-wait li {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-.desk-wait-item {
+.desk-tab {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
   border: 0;
   background: transparent;
-  padding: 0;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--amber);
   width: 100%;
-}
-
-.desk-wait-item strong {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.desk-wait-subject {
-  font-family: var(--font-voice);
-  font-size: 14px;
-  line-height: 1.35;
 }
 
 .desk-head {
@@ -1042,6 +1132,26 @@ kbd {
   align-items: stretch;
   padding: 32px 8vw;
   z-index: 20;
+}
+
+.overlay-bleed {
+  padding: 0;
+  background: var(--paper);
+  align-items: stretch;
+}
+
+.overlay-bleed .composer {
+  width: 100%;
+  max-height: 100vh;
+  height: 100%;
+  border: 0;
+  padding: 28px 14vw 40px;
+}
+
+.composer-head-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
 }
 
 .overlay-palette {
@@ -1405,6 +1515,7 @@ kbd {
 .letter-editor {
   display: flex;
   flex-direction: column;
+  position: relative;
   border: 1px solid var(--rule);
   background: var(--paper);
   min-height: 280px;
@@ -1458,6 +1569,99 @@ kbd {
 
 .editor-surface a {
   color: var(--amber);
+}
+
+.composer-bleed .editor-surface {
+  min-height: calc(100vh - 320px);
+}
+
+.compose-quote {
+  border-top: 1px solid var(--rule);
+  padding-top: 10px;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.compose-quote summary {
+  cursor: pointer;
+  font-family: var(--sans);
+}
+
+.compose-quote blockquote {
+  margin: 10px 0 0;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--amber);
+  font-family: var(--font-voice);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink);
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.snippet-menu {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  max-height: 180px;
+  overflow: auto;
+}
+
+.snippet-menu button {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.snippet-menu button.active,
+.snippet-menu button:hover {
+  background: var(--select);
+}
+
+.snippet-menu span {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.compose-snippets {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.compose-snippets ul {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.compose-snippets li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.snippet-add {
+  display: grid;
+  grid-template-columns: 120px 1fr auto;
+  gap: 8px;
+  align-items: center;
 }
 
 .settings p,

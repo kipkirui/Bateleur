@@ -15,6 +15,7 @@ import { StaffModal } from "./components/StaffModal";
 import type { AccountDraft, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, SyncStatus } from "./types";
 import type { MailTo } from "./lib/links";
 import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
+import { fromMessage, withQuote, replySubject, type ComposeQuote } from "./lib/quote";
 import {
   bumpReceipt,
   formatReceipt,
@@ -54,6 +55,7 @@ export default function App() {
   const [composeBody, setComposeBody] = useState("");
   const [composeFromId, setComposeFromId] = useState("");
   const [composeFiles, setComposeFiles] = useState<DraftAttachment[]>([]);
+  const [composeQuote, setComposeQuote] = useState<ComposeQuote | null>(null);
   const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -76,6 +78,7 @@ export default function App() {
   const archiveTimer = useRef(0);
   const sendTimer = useRef(0);
   const pendingSend = useRef<SendDraft | null>(null);
+  const pendingQuote = useRef<ComposeQuote | null>(null);
   const flagUndo = useRef<FlagChange[] | null>(null);
   const undoKind = useRef<"archive" | "flag" | "send" | null>(null);
   const canUndoRef = useRef(canUndo);
@@ -134,7 +137,7 @@ export default function App() {
   const messages = mailbox?.messages ?? [];
   const accounts = mailbox?.accounts ?? [];
   const receiptLine = formatReceipt(receipt);
-  const deskWaiting = useMemo(() => {
+  const awaiting = useMemo(() => {
     const own = new Set(accounts.map((account) => account.address.toLowerCase()));
     const scoped = accountId
       ? messages.filter((message) => message.accountId === accountId)
@@ -143,6 +146,11 @@ export default function App() {
   }, [messages, accounts, accountId, waitingDismissed]);
 
   const visible = useMemo(() => {
+    if (feed === "awaiting") {
+      return awaiting
+        .map((item) => item.message)
+        .filter((message) => !hiddenIds.has(message.id));
+    }
     return messages.filter((m) => {
       if (accountId && m.accountId !== accountId) return false;
       if (hiddenIds.has(m.id)) return false;
@@ -154,7 +162,7 @@ export default function App() {
       if (m.feed !== feed) return false;
       return true;
     });
-  }, [messages, accountId, feed, hiddenIds]);
+  }, [messages, accountId, feed, hiddenIds, awaiting]);
 
   const digest = useMemo(() => {
     if (feed !== "action") return [];
@@ -218,18 +226,16 @@ export default function App() {
     setComposeBody(mail.body ? toEditorHtml(mail.body) : "");
     setComposeFromId(accountId ?? accounts[0]?.id ?? "");
     setComposeFiles([]);
+    setComposeQuote(null);
     setSendError(null);
     setOverlay("compose");
   }, [accountId, accounts]);
 
   const openCompose = useCallback((draft?: Partial<Message>) => {
     setComposeTo(draft?.fromEmail ?? "");
-    setComposeSubject(draft ? `Re: ${readableText(draft.subject ?? "")}` : "");
-    setComposeBody(
-      draft
-        ? `<p><br></p><blockquote><p>On ${escapeHtml(draft.receivedAt ?? "")}, ${escapeHtml(readableText(draft.fromName ?? ""))} wrote:</p><p>${escapeHtml(readableText(draft.body ?? "")).replace(/\n/g, "<br>")}</p></blockquote>`
-        : "",
-    );
+    setComposeSubject(draft ? replySubject(draft.subject ?? "") : "");
+    setComposeBody("");
+    setComposeQuote(draft ? fromMessage(draft) : null);
     setComposeFromId(draft?.accountId ?? accountId ?? accounts[0]?.id ?? "");
     setComposeFiles([]);
     setSendError(null);
@@ -298,6 +304,7 @@ export default function App() {
     setSendError(null);
     await flushArchive();
     pendingSend.current = draft;
+    pendingQuote.current = composeQuote;
     undoKind.current = "send";
     flagUndo.current = null;
     setOverlay("none");
@@ -305,6 +312,7 @@ export default function App() {
     setComposeSubject("");
     setComposeBody("");
     setComposeFiles([]);
+    setComposeQuote(null);
     setCanUndo(true);
     setToast("Sending");
     window.clearTimeout(sendTimer.current);
@@ -313,12 +321,14 @@ export default function App() {
     }, UNDO_MS);
   }
 
-  function restoreCompose(draft: SendDraft) {
+  function restoreCompose(draft: SendDraft, quote: ComposeQuote | null = pendingQuote.current) {
     setComposeTo(draft.to);
     setComposeSubject(draft.subject);
     setComposeBody(draft.html || draft.body);
     setComposeFromId(draft.accountId);
     setComposeFiles(draft.attachments ?? []);
+    setComposeQuote(quote);
+    pendingQuote.current = null;
     setSendError(null);
     setOverlay("compose");
   }
@@ -327,21 +337,24 @@ export default function App() {
     window.clearTimeout(sendTimer.current);
     const draft = pendingSend.current;
     pendingSend.current = null;
+    const quote = pendingQuote.current;
+    pendingQuote.current = null;
     if (undoKind.current === "send") {
       undoKind.current = null;
       setCanUndo(false);
     }
     if (!draft) return;
+    const sealed = { ...draft, ...withQuote(draft.html ?? "", draft.body, quote) };
     setSendBusy(true);
     try {
-      const next = await sendMail(draft);
+      const next = await sendMail(sealed);
       setMailbox(next);
       setFeed("sent");
       setAccountId(draft.accountId);
       setToast("Sent");
       note("sent");
     } catch (err) {
-      restoreCompose(draft);
+      restoreCompose(draft, quote);
       setSendError(err instanceof Error ? err.message : String(err));
       setToast("Send failed");
     } finally {
@@ -594,17 +607,6 @@ export default function App() {
     setOverlay("sender");
   }
 
-  function openWaiting(id: string) {
-    const message = messages.find((item) => item.id === id);
-    if (!message) return;
-    setSelectedId(id);
-    if (message.folder === "sent") setFeed("sent");
-    else if (message.folder === "inbox" && message.feed === "reading") setFeed("reading");
-    else if (message.folder === "inbox") setFeed("action");
-    else if (message.folder === "drafts" || message.folder === "junk") setFeed(message.folder);
-    setOverlay("reader");
-  }
-
   function dismissWaiting(id: string) {
     setWaitingDismissed((prev) => {
       const next = new Set(prev);
@@ -752,6 +754,8 @@ export default function App() {
       archiveQueue.current = [];
       const draft = pendingSend.current;
       pendingSend.current = null;
+      const quote = pendingQuote.current;
+      pendingQuote.current = null;
       void (async () => {
         for (const message of batch) {
           try {
@@ -762,7 +766,7 @@ export default function App() {
         }
         if (draft) {
           try {
-            await sendMail(draft);
+            await sendMail({ ...draft, ...withQuote(draft.html ?? "", draft.body, quote) });
           } catch {
             /* leaving */
           }
@@ -782,14 +786,24 @@ export default function App() {
             ? "Junk is empty."
             : feed.startsWith("custom:")
               ? "Nothing in this folder."
-              : feed === "action"
-                ? "Nothing needs you right now."
-                : "Nothing in this feed.";
+              : feed === "awaiting"
+                ? "Nothing you're waiting on. Flag a letter to chase a reply, or a sent letter with no answer after four days shows up here."
+                : feed === "action"
+                  ? "Nothing needs you right now."
+                  : "Nothing in this feed.";
 
   const paletteCommands: PaletteCommand[] = [
     {
+      id: "awaiting",
+      label: awaiting.length > 0 ? `Awaiting reply (${awaiting.length})` : "Awaiting reply",
+      run: () => {
+        setFeed("awaiting");
+        setOverlay("none");
+      },
+    },
+    {
       id: "desk",
-      label: deskWaiting.length > 0 ? `Open desk (${deskWaiting.length} waiting-on)` : "Open desk",
+      label: "Open staff desk",
       run: () => {
         setDeskOpen(true);
         setOverlay("none");
@@ -948,7 +962,8 @@ export default function App() {
         feed={feed}
         onFeed={setFeed}
         waiting={waitingFor(messages, accountId)}
-        syncLabel={syncLabel(syncByAccount, accountId)}
+        awaiting={awaiting.length}
+        sync={syncCaption(syncByAccount, accountId)}
         folders={mailbox?.folders ?? []}
         mode={mode}
         onMode={setMode}
@@ -987,6 +1002,8 @@ export default function App() {
         onClearChecked={() => setCheckedIds(new Set())}
         emptyLabel={emptyLabel}
         receiptLine={feed === "action" ? receiptLine : null}
+        awaiting={feed === "awaiting" ? awaiting : []}
+        onDismissAwaiting={dismissWaiting}
       />
       <Desk
         open={deskOpen}
@@ -995,10 +1012,7 @@ export default function App() {
           setDeskOpen(true);
           setOverlay("staff");
         }}
-        waiting={deskWaiting}
         receipt={receiptLine}
-        onOpen={openWaiting}
-        onDismiss={dismissWaiting}
       />
     </div>
 
@@ -1036,6 +1050,7 @@ export default function App() {
           onBody={setComposeBody}
           files={composeFiles}
           onFiles={setComposeFiles}
+          quote={composeQuote}
           busy={sendBusy}
           error={sendError}
           onClose={() => {
@@ -1133,39 +1148,21 @@ export default function App() {
   );
 }
 
-function syncLabel(
+function syncCaption(
   byAccount: Record<string, SyncStatus>,
   accountId: string | null,
-): string {
+): { label: string; hint: string } | null {
   const rows = accountId
     ? [byAccount[accountId]].filter(Boolean)
     : Object.values(byAccount);
-  if (rows.some((row) => row.state === "syncing")) return "Syncing";
-  if (rows.some((row) => row.state === "error")) return "Sync failed";
-  if (rows.some((row) => row.state === "watching")) return "Watching";
-  const times = rows
-    .map((row) => row.at)
-    .filter((at): at is string => Boolean(at))
-    .sort();
-  const stamped = times[times.length - 1];
-  if (stamped) return `Synced ${formatAgo(stamped)}`;
-  return "";
-}
-
-function formatAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(ms) || ms < 20_000) return "just now";
-  const minutes = Math.round(ms / 60_000);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  if (rows.some((row) => row.state === "syncing")) {
+    return { label: "Syncing", hint: "Fetching from the server." };
+  }
+  if (rows.some((row) => row.state === "error")) {
+    return {
+      label: "Sync failed",
+      hint: "Could not reach the server. Try Settings → Sync.",
+    };
+  }
+  return null;
 }

@@ -80,7 +80,7 @@ export function waitingItems(
       id: message.id,
       message,
       kind: "flag" as const,
-      reason: "You flagged this",
+      reason: "Flagged to chase",
       counterpart:
         message.folder === "sent"
           ? counterparts(message, accountEmails)[0] || message.toEmail || message.fromEmail
@@ -101,7 +101,7 @@ export function waitingItems(
       id: message.id,
       message,
       kind: "stale",
-      reason: "No reply in 4 days",
+      reason: "Sent · no reply in 4 days",
       counterpart: tos[0],
     });
   }

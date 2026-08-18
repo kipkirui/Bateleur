@@ -8,6 +8,25 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.14.2] - 2026-08-18
+
+### Changed
+
+- Rail status is **N need you** (unread Action) and **Awaiting a reply** (their turn). Syncing / Sync failed still interrupt that stack; Watching and Synced stay off it so the counts stay the only standing lines
+
+## [0.14.1] - 2026-08-18
+
+### Changed
+
+- **Awaiting reply** is a badge on the left rail, not the staff drawer. Those letters are open loops — you flagged them to chase, or you sent them and heard nothing for four days. **N waiting** under the mark is still Action mail that needs you. The right rail is Hire staff again
+
+## [0.14.0] - 2026-08-18
+
+### Added
+
+- Compose **Focus** fills the window (no card chrome). Reply keeps the original letter in a collapsed magazine quote instead of dumping `>` walls into the editor; it is appended on send
+- Local snippets: type `::thanks` or `/followup` in the letter. Manage them under Snippets in Compose. They stay on this machine
+
 ## [0.13.0] - 2026-08-18
 
 ### Added

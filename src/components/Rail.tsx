@@ -10,6 +10,7 @@ type Props = {
   feed: FeedId;
   onFeed: (feed: FeedId) => void;
   waiting: number;
+  awaiting: number;
   folders: MailFolder[];
   mode: ReaderMode;
   onMode: (mode: ReaderMode) => void;
@@ -17,7 +18,7 @@ type Props = {
   onSettings: () => void;
   theme: "day" | "night";
   onTheme: () => void;
-  syncLabel: string;
+  sync: { label: string; hint: string } | null;
 };
 
 const FEEDS: { id: FeedId; label: string }[] = [
@@ -38,6 +39,7 @@ export function Rail({
   feed,
   onFeed,
   waiting,
+  awaiting,
   folders,
   mode,
   onMode,
@@ -45,7 +47,7 @@ export function Rail({
   onSettings,
   theme,
   onTheme,
-  syncLabel,
+  sync,
 }: Props) {
   return (
     <aside className="rail">
@@ -59,8 +61,39 @@ export function Rail({
             draggable={false}
           />
         </div>
-        <div className="waiting">{waiting} waiting</div>
-        {syncLabel ? <div className="sync-status">{syncLabel}</div> : null}
+        <div className="rail-status">
+          <div className="rail-stat">
+            <div className="waiting">
+              {waiting === 0 ? "0 need you" : `${waiting} need you`}
+            </div>
+            <p className="rail-stat-hint">
+              {waiting === 0
+                ? "Action is clear. Nothing in that pile is unread."
+                : "Unread Action — invoices, codes, please-reply. Your turn."}
+            </p>
+          </div>
+          {awaiting > 0 ? (
+            <button
+              type="button"
+              className={feed === "awaiting" ? "await-badge active" : "await-badge"}
+              onClick={() => onFeed(feed === "awaiting" ? "action" : "awaiting")}
+            >
+              <span className="await-count">{awaiting}</span>
+              <span className="await-copy">
+                <span className="await-label">Awaiting a reply</span>
+                <span className="rail-stat-hint">
+                  Their turn. Flagged to chase, or sent with no answer in four days.
+                </span>
+              </span>
+            </button>
+          ) : null}
+          {sync ? (
+            <div className="rail-stat">
+              <div className="sync-status">{sync.label}</div>
+              <p className="rail-stat-hint">{sync.hint}</p>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <button className="compose" type="button" onClick={onCompose}>

@@ -2,6 +2,7 @@ import { useState, type MouseEvent } from "react";
 import { readableText } from "../lib/emailHtml";
 import { formatWhen, lede } from "../lib/magazine";
 import { groupStories } from "../lib/stories";
+import type { WaitingItem } from "../lib/waiting";
 import { Avatar } from "./Avatar";
 import type { FeedId, Message, ReaderMode } from "../types";
 
@@ -25,6 +26,8 @@ type Props = {
   onClearChecked: () => void;
   emptyLabel: string;
   receiptLine?: string | null;
+  awaiting?: WaitingItem[];
+  onDismissAwaiting?: (id: string) => void;
 };
 
 export function Feed({
@@ -47,6 +50,8 @@ export function Feed({
   onClearChecked,
   emptyLabel,
   receiptLine,
+  awaiting = [],
+  onDismissAwaiting,
 }: Props) {
   const checked = checkedIds.size;
   const selecting = checked > 0;
@@ -86,6 +91,48 @@ export function Feed({
               {receiptLine ?? "Action is clear. Reading is still there when you want it."}
             </p>
           </div>
+        ) : feed === "awaiting" ? (
+          awaiting.length === 0 ? (
+            <div className="empty">{emptyLabel}</div>
+          ) : (
+            <div className="magazine">
+              <div className="block">
+                <h2>Awaiting reply</h2>
+                <p className="muted await-lede">
+                  These are open loops — you are waiting on someone else, not the other way around.
+                </p>
+                <ul className="await-list">
+                  {awaiting.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        className={`await-row${selectedId === item.id ? " selected" : ""}`}
+                        onClick={() => onSelect(item.id)}
+                        onDoubleClick={() => onOpen(item.id)}
+                      >
+                        <span className="await-who">
+                          {readableText(item.counterpart) || "Someone"}
+                        </span>
+                        <span className="await-why">{item.reason}</span>
+                        <span className="await-subject">
+                          {readableText(item.message.subject)}
+                        </span>
+                      </button>
+                      {item.kind === "stale" && onDismissAwaiting ? (
+                        <button
+                          type="button"
+                          className="text-btn"
+                          onClick={() => onDismissAwaiting(item.id)}
+                        >
+                          Dismiss
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )
         ) : messages.length === 0 ? (
           <div className="empty">{emptyLabel}</div>
         ) : mode === "raw" ? (
@@ -508,6 +555,7 @@ function Check({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 
 function feedHeading(feed: FeedId): string {
   if (feed === "reading") return "Reading";
+  if (feed === "awaiting") return "Awaiting reply";
   if (feed === "sent") return "Sent";
   if (feed === "drafts") return "Drafts";
   if (feed === "junk") return "Junk";
