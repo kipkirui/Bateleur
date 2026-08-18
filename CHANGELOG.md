@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.24.0] - 2026-08-18
+
+### Added
+
+- Paper stocks beyond day/night: **Cream**, **Newsprint**, **Sepia**, and **Night**. Pick one in the rail or Ctrl+K; it persists. Cream and night are the same papers as before
+
 ## [0.23.0] - 2026-08-18
 
 ### Added

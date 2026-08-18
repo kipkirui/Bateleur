@@ -1,6 +1,7 @@
 import wordmarkDay from "../assets/logo/vector/isolated-monochrome-black.svg";
 import wordmarkNight from "../assets/logo/vector/isolated-monochrome-white.svg";
 import type { Account, FeedId, MailFolder, ReaderMode } from "../types";
+import { PAPER_STOCKS, paperInk, type PaperStock } from "../lib/paper";
 import { Mark } from "./Mark";
 
 type Props = {
@@ -18,8 +19,8 @@ type Props = {
   onMode: (mode: ReaderMode) => void;
   onCompose: () => void;
   onSettings: () => void;
-  theme: "day" | "night";
-  onTheme: () => void;
+  paper: PaperStock;
+  onPaper: (stock: PaperStock) => void;
   sync: { label: string; hint: string } | null;
   stories?: { id: string; title: string; count: number }[];
   storyId?: string | null;
@@ -52,8 +53,8 @@ export function Rail({
   onMode,
   onCompose,
   onSettings,
-  theme,
-  onTheme,
+  paper,
+  onPaper,
   sync,
   stories = [],
   storyId = null,
@@ -63,10 +64,10 @@ export function Rail({
     <aside className="rail">
       <div className="brand">
         <div className="brand-lockup">
-          <Mark theme={theme} />
+          <Mark paper={paper} />
           <img
             className="brand-logo"
-            src={theme === "night" ? wordmarkNight : wordmarkDay}
+            src={paperInk(paper) === "light" ? wordmarkNight : wordmarkDay}
             alt="Bateleur"
             draggable={false}
           />
@@ -247,9 +248,18 @@ export function Rail({
         </button>
       </div>
 
-      <button type="button" className="nav" onClick={onTheme}>
-        {theme === "day" ? "Night paper" : "Day paper"}
-      </button>
+      <div className="paper-switch">
+        {PAPER_STOCKS.map((stock) => (
+          <button
+            key={stock.id}
+            type="button"
+            className={paper === stock.id ? "active" : ""}
+            onClick={() => onPaper(stock.id)}
+          >
+            {stock.label}
+          </button>
+        ))}
+      </div>
       <button type="button" className="nav" onClick={onSettings}>
         Settings
       </button>

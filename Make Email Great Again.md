@@ -33,7 +33,7 @@ Spend the model on what the user asked for. Cheap local classifiers can pre-filt
 
 Three zones: left = control, center = reading, right = execution. This is a desktop mail client that *looks* like a magazine, not a blog that forgot compose. Design the **staff-off** shell first. The original “Balance 98% / Morning Brief / always-on Co-Pilot” mock is state two only.
 
-Weights: left rail ~220px, center flex, Co-Pilot ~300px **and collapsed when idle or staff off**. Not 15 / 60 / 25 always-on. No emoji in the chrome. One Bateleur mark. Geometric sans for chrome, serif (Merriweather or Lora) only for story headlines and body. Paper: cream `#FDFBF7` and charcoal by day; onyx and amber at night. No glow on the command bar. Zero pop-up windows; cards expand into an article reader (full thread), with a raw/source toggle inside that reader.
+Weights: left rail ~220px, center flex, Co-Pilot ~300px **and collapsed when idle or staff off**. Not 15 / 60 / 25 always-on. No emoji in the chrome. One Bateleur mark. Geometric sans for chrome, serif (Merriweather or Lora) only for story headlines and body. Paper: cream `#FDFBF7` and charcoal by day; onyx and amber at night; newsprint and sepia as extra stocks. No glow on the command bar. Zero pop-up windows; cards expand into an article reader (full thread), with a raw/source toggle inside that reader.
 
 ### Two states
 

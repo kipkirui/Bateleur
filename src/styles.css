@@ -1,4 +1,6 @@
-:root {
+:root,
+[data-theme="day"],
+[data-theme="cream"] {
   --paper: #fdfbf7;
   --paper-2: #f3eee6;
   --ink: #1c1917;
@@ -7,12 +9,43 @@
   --amber: #c45c26;
   --amber-soft: #ead5c6;
   --select: #efe4d8;
+  --compose-fill: var(--ink);
+  --compose-ink: var(--paper);
+  --badge-ink: #fdfbf7;
   --sans: "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --font-voice: var(--serif);
   --bg-accent: var(--amber-soft);
   --rail: 220px;
   --desk: 44px;
+}
+
+[data-theme="newsprint"] {
+  --paper: #ece9e0;
+  --paper-2: #e0dccf;
+  --ink: #141412;
+  --ink-soft: #4a4944;
+  --rule: #cfc9b8;
+  --amber: #9c2b1a;
+  --amber-soft: #e4d2cc;
+  --select: #ddd6c6;
+  --compose-fill: var(--ink);
+  --compose-ink: var(--paper);
+  --badge-ink: #ece9e0;
+}
+
+[data-theme="sepia"] {
+  --paper: #f3e6d0;
+  --paper-2: #e8d4b8;
+  --ink: #3b2414;
+  --ink-soft: #7a5a40;
+  --rule: #d9c4a8;
+  --amber: #a65b28;
+  --amber-soft: #e6d0b4;
+  --select: #e8d5bc;
+  --compose-fill: var(--ink);
+  --compose-ink: var(--paper);
+  --badge-ink: #f3e6d0;
 }
 
 [data-theme="night"] {
@@ -24,6 +57,9 @@
   --amber: #e8a54b;
   --amber-soft: #3a2c1c;
   --select: #2a241c;
+  --compose-fill: var(--amber);
+  --compose-ink: #12110f;
+  --badge-ink: #12110f;
 }
 
 * {
@@ -188,15 +224,11 @@ kbd {
   align-items: center;
   justify-content: center;
   background: var(--amber);
-  color: #fdfbf7;
+  color: var(--badge-ink);
   font-size: 11px;
   font-weight: 600;
   border-radius: 999px;
   flex-shrink: 0;
-}
-
-[data-theme="night"] .await-count {
-  color: #12110f;
 }
 
 .sync-status {
@@ -209,16 +241,11 @@ kbd {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--compose-fill);
+  color: var(--compose-ink);
   border: 0;
   padding: 10px 12px;
   margin-bottom: 18px;
-}
-
-[data-theme="night"] .compose {
-  background: var(--amber);
-  color: #12110f;
 }
 
 .rail-label {
@@ -276,6 +303,25 @@ kbd {
 }
 
 .mode-switch .active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.paper-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--rule);
+  margin-bottom: 8px;
+}
+
+.paper-switch button {
+  background: transparent;
+  border: 0;
+  padding: 6px 0;
+  font-size: 11px;
+}
+
+.paper-switch .active {
   background: var(--ink);
   color: var(--paper);
 }
@@ -473,7 +519,7 @@ kbd {
 
 .tone-amber {
   background: var(--amber);
-  color: #fdfbf7;
+  color: var(--badge-ink);
 }
 
 .tone-paper {
@@ -1199,7 +1245,7 @@ kbd {
 .desk-cta {
   margin-top: 8px;
   background: var(--amber);
-  color: #fdfbf7;
+  color: var(--badge-ink);
   padding: 9px 12px;
 }
 

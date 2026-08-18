@@ -1,15 +1,16 @@
 import iconDay from "../assets/logo/icon-black.svg";
 import iconNight from "../assets/logo/icon-white.svg";
+import { paperInk, type PaperStock } from "../lib/paper";
 
 type Props = {
-  theme: "day" | "night";
+  paper: PaperStock;
 };
 
-export function Mark({ theme }: Props) {
+export function Mark({ paper }: Props) {
   return (
     <img
       className="mark"
-      src={theme === "night" ? iconNight : iconDay}
+      src={paperInk(paper) === "light" ? iconNight : iconDay}
       alt=""
       draggable={false}
     />

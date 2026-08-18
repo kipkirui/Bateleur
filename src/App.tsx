@@ -15,6 +15,7 @@ import { StaffModal } from "./components/StaffModal";
 import type { AccountDraft, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, StaffBrief, StaffStatus, StoryOverride, SyncStatus } from "./types";
 import type { MailTo } from "./lib/links";
 import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
+import { loadPaper, PAPER_STOCKS, savePaper, type PaperStock } from "./lib/paper";
 import { fromMessage, forwardSubject, hasReplyAll, ownAddresses, replyAllParts, replySubject, replyTo, withQuote, type ComposeQuote } from "./lib/quote";
 import {
   bumpReceipt,
@@ -48,7 +49,7 @@ export default function App() {
   const [overlay, setOverlay] = useState<Overlay>("none");
   const [senderEmail, setSenderEmail] = useState<string | null>(null);
   const [deskOpen, setDeskOpen] = useState(false);
-  const [theme, setTheme] = useState<"day" | "night">("day");
+  const [paper, setPaper] = useState<PaperStock>(loadPaper);
   const [remoteImages, setRemoteImages] = useState(loadRemoteImagesPref);
   const [mailAlerts, setMailAlertsOn] = useState(true);
   const [staff, setStaff] = useState<StaffStatus>({
@@ -126,8 +127,9 @@ export default function App() {
   }, [refresh]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
+    document.documentElement.dataset.theme = paper;
+    savePaper(paper);
+  }, [paper]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -1248,14 +1250,14 @@ export default function App() {
         setOverlay("none");
       },
     },
-    {
-      id: "theme",
-      label: theme === "day" ? "Night paper" : "Day paper",
+    ...PAPER_STOCKS.map((stock) => ({
+      id: `paper-${stock.id}`,
+      label: `${stock.label} paper`,
       run: () => {
-        setTheme((t) => (t === "day" ? "night" : "day"));
+        setPaper(stock.id);
         setOverlay("none");
       },
-    },
+    })),
     {
       id: "archive-visible",
       label: "Archive this feed",
@@ -1348,8 +1350,8 @@ export default function App() {
           setAccountError(null);
           setOverlay("settings");
         }}
-        theme={theme}
-        onTheme={() => setTheme((t) => (t === "day" ? "night" : "day"))}
+        paper={paper}
+        onPaper={setPaper}
         stories={
           staff.hired
             ? railStories(stories).map((story) => ({
