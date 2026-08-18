@@ -18,7 +18,7 @@ export function MorningBrief({ brief, busy, error, onWrite, onOpen }: Props) {
         </button>
       </div>
       {brief ? <p className="staff-blurb">{brief.blurb}</p> : (
-        <p className="muted">Unread Action in this mailbox, as a deck.</p>
+        <p className="muted">Up to eight unread Action letters. A line leaves once you read it.</p>
       )}
       {brief?.items.length ? (
         <ul className="brief-items">

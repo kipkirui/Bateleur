@@ -298,6 +298,7 @@ pub fn rsvp(runtime: &Runtime, message: &Message) -> Result<StaffDraft, String> 
 }
 
 const BRIEF_LIMIT: usize = 12;
+const BRIEF_ITEMS: usize = 8;
 const NEW_MAIL_LIMIT: usize = 8;
 
 pub fn brief_id(account_id: Option<&str>) -> String {
@@ -555,7 +556,7 @@ fn parse_brief(raw: &str, letters: &[Message]) -> StaffBrief {
                             line: line.to_string(),
                         })
                     })
-                    .take(8)
+                    .take(BRIEF_ITEMS)
                     .collect()
             })
             .unwrap_or_default();

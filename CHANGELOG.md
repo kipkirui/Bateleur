@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.20.1] - 2026-08-18
+
+### Fixed
+
+- Morning Brief lists at most eight unread Action letters. A line leaves the list once that letter is read, archived, or no longer Action. Refresh brief still rewrites the deck
+
 ## [0.20.0] - 2026-08-18
 
 ### Added

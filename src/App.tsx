@@ -177,6 +177,20 @@ export default function App() {
   const accounts = mailbox?.accounts ?? [];
   const ownMail = useMemo(() => ownAddresses(accounts), [accounts]);
   const receiptLine = formatReceipt(receipt);
+  const liveBrief = useMemo(() => {
+    if (!brief) return null;
+    const live = new Set(
+      messages
+        .filter((message) => {
+          if (accountId && message.accountId !== accountId) return false;
+          if (hiddenIds.has(message.id)) return false;
+          return message.unread && message.feed === "action" && message.folder === "inbox";
+        })
+        .map((message) => message.id),
+    );
+    const items = brief.items.filter((item) => live.has(item.id));
+    return items.length === brief.items.length ? brief : { ...brief, items };
+  }, [brief, messages, accountId, hiddenIds]);
   const awaiting = useMemo(() => {
     const own = new Set(accounts.map((account) => account.address.toLowerCase()));
     const scoped = accountId
@@ -1239,7 +1253,7 @@ export default function App() {
         receiptLine={feed === "action" ? receiptLine : null}
         awaiting={feed === "awaiting" ? awaiting : []}
         onDismissAwaiting={dismissWaiting}
-        brief={brief}
+        brief={liveBrief}
         briefBusy={briefBusy}
         briefError={briefError}
         showBrief={staff.hired && staff.summarizeAccount && !storyFilter}
