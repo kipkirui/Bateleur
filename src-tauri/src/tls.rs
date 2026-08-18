@@ -4,9 +4,17 @@ use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{ClientConfig, DigitallySignedStruct, Error, RootCertStore, SignatureScheme};
 use std::sync::{Arc, OnceLock};
 
+pub fn install() {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+}
+
 pub fn client_config(trust_anyway: bool) -> Result<ClientConfig, String> {
+    install();
+    let builder = ClientConfig::builder_with_provider(provider())
+        .with_safe_default_protocol_versions()
+        .map_err(|e| format!("TLS: {e}"))?;
     if trust_anyway {
-        return Ok(ClientConfig::builder()
+        return Ok(builder
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(TrustAnyway))
             .with_no_client_auth());
@@ -20,7 +28,7 @@ pub fn client_config(trust_anyway: bool) -> Result<ClientConfig, String> {
     if roots.is_empty() {
         return Err("No TLS root certificates available.".into());
     }
-    Ok(ClientConfig::builder()
+    Ok(builder
         .with_root_certificates(roots)
         .with_no_client_auth())
 }
@@ -75,7 +83,8 @@ impl ServerCertVerifier for TrustAnyway {
     }
 }
 
-fn provider() -> &'static CryptoProvider {
-    static CELL: OnceLock<CryptoProvider> = OnceLock::new();
-    CELL.get_or_init(rustls::crypto::aws_lc_rs::default_provider)
+fn provider() -> Arc<CryptoProvider> {
+    static CELL: OnceLock<Arc<CryptoProvider>> = OnceLock::new();
+    CELL.get_or_init(|| Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
+        .clone()
 }
