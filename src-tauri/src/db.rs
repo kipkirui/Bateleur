@@ -69,6 +69,14 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
             feed TEXT NOT NULL,
             hits INTEGER NOT NULL DEFAULT 0
         );
+        CREATE TABLE IF NOT EXISTS staff_notes (
+            message_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            body TEXT NOT NULL,
+            extra TEXT NOT NULL DEFAULT '',
+            at TEXT NOT NULL,
+            PRIMARY KEY (message_id, kind)
+        );
         ",
     )
     .map_err(err)?;
@@ -181,6 +189,21 @@ pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
         accounts,
         messages,
         folders,
+    })
+}
+
+pub fn get_message(conn: &Connection, id: &str) -> Result<Message, String> {
+    conn.query_row(
+        "SELECT id, account_id, feed, from_name, from_email, subject, preview, body,
+                received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body,
+                flagged, category, why, to_email, rfc_id, in_reply_to
+         FROM messages WHERE id = ?1",
+        [id],
+        message_from_row,
+    )
+    .map_err(|e| match e {
+        rusqlite::Error::QueryReturnedNoRows => "That letter is not in the cache.".into(),
+        other => other.to_string(),
     })
 }
 
@@ -582,11 +605,25 @@ pub fn message_ids(conn: &Connection, account_id: &str) -> Result<HashSet<String
 }
 
 pub fn pref_bool(conn: &Connection, key: &str) -> Result<bool, String> {
+    pref_bool_or(conn, key, true)
+}
+
+pub fn pref_bool_or(conn: &Connection, key: &str, default: bool) -> Result<bool, String> {
     match conn.query_row("SELECT value FROM prefs WHERE key = ?1", [key], |row| {
         row.get::<_, String>(0)
     }) {
         Ok(value) => Ok(value != "0"),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(true),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(default),
+        Err(other) => Err(other.to_string()),
+    }
+}
+
+pub fn pref_string(conn: &Connection, key: &str, default: &str) -> Result<String, String> {
+    match conn.query_row("SELECT value FROM prefs WHERE key = ?1", [key], |row| {
+        row.get::<_, String>(0)
+    }) {
+        Ok(value) => Ok(value),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(default.to_string()),
         Err(other) => Err(other.to_string()),
     }
 }
@@ -595,6 +632,45 @@ pub fn set_pref(conn: &Connection, key: &str, value: &str) -> Result<(), String>
     conn.execute(
         "INSERT OR REPLACE INTO prefs (key, value) VALUES (?1, ?2)",
         params![key, value],
+    )
+    .map_err(err)?;
+    Ok(())
+}
+
+pub fn staff_note(
+    conn: &Connection,
+    message_id: &str,
+    kind: &str,
+) -> Result<Option<(String, String, String)>, String> {
+    match conn.query_row(
+        "SELECT body, extra, at FROM staff_notes WHERE message_id = ?1 AND kind = ?2",
+        params![message_id, kind],
+        |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        },
+    ) {
+        Ok(row) => Ok(Some(row)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(other) => Err(other.to_string()),
+    }
+}
+
+pub fn set_staff_note(
+    conn: &Connection,
+    message_id: &str,
+    kind: &str,
+    body: &str,
+    extra: &str,
+) -> Result<(), String> {
+    let at = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT OR REPLACE INTO staff_notes (message_id, kind, body, extra, at)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![message_id, kind, body, extra, at],
     )
     .map_err(err)?;
     Ok(())

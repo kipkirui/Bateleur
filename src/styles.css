@@ -1402,6 +1402,44 @@ kbd {
   text-transform: uppercase;
 }
 
+.staff-note {
+  margin: 0 0 20px;
+  padding: 12px 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.staff-blurb {
+  margin: 6px 0 8px;
+  font-family: var(--font-voice);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.staff-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.staff-note-actions,
+.staff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: center;
+}
+
+.staff-actions {
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.staff-error {
+  color: var(--ink);
+}
+
 .settings.staff-modal {
   display: flex;
   flex-direction: column;

@@ -7,6 +7,7 @@ mod parse;
 mod pop;
 mod secrets;
 mod smtp;
+mod staff;
 mod tls;
 mod watch;
 
@@ -587,6 +588,68 @@ fn search_mail(
     db::search_ids(&conn, &query, account_id.as_deref())
 }
 
+#[tauri::command]
+fn staff_status(state: State<AppState>) -> Result<staff::StaffStatus, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    staff::status(&conn)
+}
+
+#[tauri::command]
+fn save_staff(state: State<AppState>, hire: staff::StaffHire) -> Result<staff::StaffStatus, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    staff::save(&conn, hire)
+}
+
+#[tauri::command]
+fn clear_staff(state: State<AppState>) -> Result<staff::StaffStatus, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    staff::clear(&conn)
+}
+
+#[tauri::command]
+fn staff_letter(state: State<AppState>, message_id: String) -> Result<staff::StaffLetter, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    staff::letter_notes(&conn, &message_id)
+}
+
+#[tauri::command]
+async fn summarize_mail(
+    state: State<'_, AppState>,
+    message_id: String,
+) -> Result<staff::StaffSummary, String> {
+    let (runtime, message) = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        staff::prepare_summarize(&conn, &message_id)?
+    };
+    let summary = tauri::async_runtime::spawn_blocking(move || staff::summarize(&runtime, &message))
+        .await
+        .map_err(|e| e.to_string())??;
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        staff::store_summary(&conn, &message_id, &summary)?;
+    }
+    Ok(summary)
+}
+
+#[tauri::command]
+async fn draft_reply(
+    state: State<'_, AppState>,
+    message_id: String,
+) -> Result<staff::StaffDraft, String> {
+    let (runtime, message) = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        staff::prepare_draft(&conn, &message_id)?
+    };
+    let draft = tauri::async_runtime::spawn_blocking(move || staff::draft(&runtime, &message))
+        .await
+        .map_err(|e| e.to_string())??;
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        staff::store_draft(&conn, &message_id, &draft)?;
+    }
+    Ok(draft)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tls::install();
@@ -623,7 +686,13 @@ pub fn run() {
             move_to_reading,
             reset_sender,
             lock_sender_reading,
-            search_mail
+            search_mail,
+            staff_status,
+            save_staff,
+            clear_staff,
+            staff_letter,
+            summarize_mail,
+            draft_reply
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

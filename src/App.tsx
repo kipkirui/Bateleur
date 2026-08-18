@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, searchMail, sendMail, setFlag, setMailAlerts, syncAccount } from "./api";
+import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, searchMail, sendMail, setFlag, setMailAlerts, staffStatus as loadStaffStatus, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -12,7 +12,7 @@ import { Settings } from "./components/Settings";
 import { SenderPage } from "./components/SenderPage";
 import { Palette, type PaletteCommand } from "./components/Palette";
 import { StaffModal } from "./components/StaffModal";
-import type { AccountDraft, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, SyncStatus } from "./types";
+import type { AccountDraft, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, StaffStatus, SyncStatus } from "./types";
 import type { MailTo } from "./lib/links";
 import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
 import { fromMessage, withQuote, replySubject, type ComposeQuote } from "./lib/quote";
@@ -50,6 +50,14 @@ export default function App() {
   const [theme, setTheme] = useState<"day" | "night">("day");
   const [remoteImages, setRemoteImages] = useState(loadRemoteImagesPref);
   const [mailAlerts, setMailAlertsOn] = useState(true);
+  const [staff, setStaff] = useState<StaffStatus>({
+    hired: false,
+    provider: "openai",
+    model: "",
+    endpoint: "",
+    summarize: false,
+    drafts: false,
+  });
   const [composeTo, setComposeTo] = useState("");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
@@ -105,6 +113,7 @@ export default function App() {
   useEffect(() => {
     if (!isTauri()) return;
     void loadMailAlerts().then(setMailAlertsOn).catch(() => {});
+    void loadStaffStatus().then(setStaff).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -231,10 +240,10 @@ export default function App() {
     setOverlay("compose");
   }, [accountId, accounts]);
 
-  const openCompose = useCallback((draft?: Partial<Message>) => {
+  const openCompose = useCallback((draft?: Partial<Message>, letter?: string) => {
     setComposeTo(draft?.fromEmail ?? "");
     setComposeSubject(draft ? replySubject(draft.subject ?? "") : "");
-    setComposeBody("");
+    setComposeBody(letter ? toEditorHtml(letter) : "");
     setComposeQuote(draft ? fromMessage(draft) : null);
     setComposeFromId(draft?.accountId ?? accountId ?? accounts[0]?.id ?? "");
     setComposeFiles([]);
@@ -917,7 +926,7 @@ export default function App() {
     },
     {
       id: "staff",
-      label: "Hire staff",
+      label: staff.hired ? "Staff" : "Hire staff",
       run: () => {
         setDeskOpen(true);
         setOverlay("staff");
@@ -1013,6 +1022,9 @@ export default function App() {
           setOverlay("staff");
         }}
         receipt={receiptLine}
+        hired={staff.hired}
+        summarize={staff.summarize}
+        drafts={staff.drafts}
       />
     </div>
 
@@ -1034,6 +1046,9 @@ export default function App() {
             setRemoteImages(on);
             saveRemoteImagesPref(on);
           }}
+          staff={staff}
+          onHire={() => setOverlay("staff")}
+          onDraft={(body) => openCompose(selected, body)}
         />
       ) : null}
 
@@ -1087,7 +1102,10 @@ export default function App() {
       ) : null}
 
       {overlay === "staff" ? (
-        <StaffModal onClose={() => setOverlay("none")} />
+        <StaffModal
+          onClose={() => setOverlay("none")}
+          onChange={setStaff}
+        />
       ) : null}
 
       {overlay === "palette" ? (

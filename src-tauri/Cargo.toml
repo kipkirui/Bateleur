@@ -1,6 +1,6 @@
 [package]
 name = "bateleur"
-version = "0.14.3"
+version = "0.15.0"
 description = "Bateleur — a magazine-shaped desktop mail client"
 authors = ["Kipkirui"]
 license = "MIT"

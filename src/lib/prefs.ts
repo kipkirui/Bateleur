@@ -41,6 +41,21 @@ export type StaffProvider =
   | "openrouter"
   | "compatible";
 
+export function defaultStaffModel(provider: StaffProvider): string {
+  switch (provider) {
+    case "openai":
+      return "gpt-4o-mini";
+    case "anthropic":
+      return "claude-3-5-haiku-latest";
+    case "gemini":
+      return "gemini-2.0-flash";
+    case "openrouter":
+      return "openai/gpt-4o-mini";
+    case "compatible":
+      return "llama3.2";
+  }
+}
+
 const STAFF_PROVIDER = "bateleur.staffProvider";
 const STAFF_ENDPOINT = "bateleur.staffEndpoint";
 
@@ -62,26 +77,10 @@ export function loadStaffProvider(): StaffProvider {
   return "openai";
 }
 
-export function saveStaffProvider(provider: StaffProvider) {
-  try {
-    window.localStorage.setItem(STAFF_PROVIDER, provider);
-  } catch {
-    /* ignore quota / private mode */
-  }
-}
-
 export function loadStaffEndpoint(): string {
   try {
     return window.localStorage.getItem(STAFF_ENDPOINT) ?? "";
   } catch {
     return "";
-  }
-}
-
-export function saveStaffEndpoint(url: string) {
-  try {
-    window.localStorage.setItem(STAFF_ENDPOINT, url);
-  } catch {
-    /* ignore quota / private mode */
   }
 }

@@ -24,7 +24,7 @@ This is a universal IMAP/POP client, not a Gmail wrapper. Add any mailbox. Mail 
 
 ## Status
 
-Early (0.14.3). You can add an IMAP or POP mailbox (app password or Sign in with Google / Microsoft), sync INBOX / Sent / Drafts / Junk (IMAP), read HTML mail as designed, send through SMTP after a second confirm (IMAP APPENDs a copy to Sent), archive / unread / flag, and open or attach files. Remote images stay off until you load them. IMAP inboxes are watched with IDLE; POP is polled. New unread mail can raise an OS toast. Magazine view uses a cover, briefing, and article teasers, and stacks same-subject threads. Raw is the dense table. Compose can go full-page (Focus); reply quotes sit collapsed under the letter; `::` / `/` snippets are local. Archive, flag, and send undo with `z`. `x` multi-selects. Ctrl+K searches indexed mail and runs commands. Clearing Action shows what you did today. An **Awaiting reply** badge lists open loops (flagged, or sent with no answer after four days). The right rail is Hire staff. Staff is still open.
+Early (0.15.0). You can add an IMAP or POP mailbox (app password or Sign in with Google / Microsoft), sync INBOX / Sent / Drafts / Junk (IMAP), read HTML mail as designed, send through SMTP after a second confirm (IMAP APPENDs a copy to Sent), archive / unread / flag, and open or attach files. Remote images stay off until you load them. IMAP inboxes are watched with IDLE; POP is polled. New unread mail can raise an OS toast. Magazine view uses a cover, briefing, and article teasers, and stacks same-subject threads. Raw is the dense table. Compose can go full-page (Focus); reply quotes sit collapsed under the letter; `::` / `/` snippets are local. Archive, flag, and send undo with `z`. `x` multi-selects. Ctrl+K searches indexed mail and runs commands. Clearing Action shows what you did today. An **Awaiting reply** badge lists open loops (flagged, or sent with no answer after four days). Hire staff stores a BYOK key in the OS keychain; summarize-this and draft-this run from the reader when those switches are on. Drafts open in Compose and never send on their own.
 
 Living checklist: [`STATUS.md`](./STATUS.md).  
 Product thesis: [`Make Email Great Again.md`](./Make%20Email%20Great%20Again.md).
@@ -35,7 +35,7 @@ Released versions: [`CHANGELOG.md`](./CHANGELOG.md).
 - **UI:** React + TypeScript (Vite)
 - **Shell:** Tauri 2 (native webview, not Electron)
 - **Core:** Rust crate `bateleur-core` (shared with a future mobile app)
-- **Mail:** IMAP and POP over rustls, SMTP via lettre, SQLite cache, OS keychain for passwords
+- **Mail:** IMAP and POP over rustls, SMTP via lettre, SQLite cache, OS keychain for passwords and the staff key
 - **Design:** CSS tokens in `src/styles.css` — cream paper, charcoal, amber
 
 ## Run

@@ -137,3 +137,42 @@ export type SyncStatus = {
   at?: string | null;
   message?: string | null;
 };
+
+export type StaffProvider =
+  | "openai"
+  | "anthropic"
+  | "gemini"
+  | "openrouter"
+  | "compatible";
+
+export type StaffStatus = {
+  hired: boolean;
+  provider: StaffProvider;
+  model: string;
+  endpoint: string;
+  summarize: boolean;
+  drafts: boolean;
+};
+
+export type StaffHire = {
+  provider: StaffProvider;
+  model: string;
+  endpoint: string;
+  key: string;
+  summarize: boolean;
+  drafts: boolean;
+};
+
+export type StaffSummary = {
+  blurb: string;
+  keywords: string[];
+};
+
+export type StaffDraft = {
+  body: string;
+};
+
+export type StaffLetter = {
+  summary: StaffSummary | null;
+  draft: string | null;
+};

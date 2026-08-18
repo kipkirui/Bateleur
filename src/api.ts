@@ -7,6 +7,11 @@ import type {
   OAuthStatus,
   SendDraft,
   ServerGuess,
+  StaffDraft,
+  StaffHire,
+  StaffLetter,
+  StaffStatus,
+  StaffSummary,
 } from "./types";
 
 function fromParts(
@@ -175,4 +180,51 @@ export async function lockSenderReading(email: string): Promise<Mailbox> {
 export async function searchMail(query: string, accountId: string | null): Promise<string[]> {
   if (!isTauri()) return [];
   return invoke<string[]>("search_mail", { query, accountId });
+}
+
+const EMPTY_STAFF: StaffStatus = {
+  hired: false,
+  provider: "openai",
+  model: "",
+  endpoint: "",
+  summarize: false,
+  drafts: false,
+};
+
+export async function staffStatus(): Promise<StaffStatus> {
+  if (!isTauri()) return EMPTY_STAFF;
+  return invoke<StaffStatus>("staff_status");
+}
+
+export async function saveStaff(hire: StaffHire): Promise<StaffStatus> {
+  if (!isTauri()) {
+    throw new Error("Hiring staff needs the desktop app.");
+  }
+  return invoke<StaffStatus>("save_staff", { hire });
+}
+
+export async function clearStaff(): Promise<StaffStatus> {
+  if (!isTauri()) {
+    throw new Error("Staff lives in the desktop app.");
+  }
+  return invoke<StaffStatus>("clear_staff");
+}
+
+export async function staffLetter(messageId: string): Promise<StaffLetter> {
+  if (!isTauri()) return { summary: null, draft: null };
+  return invoke<StaffLetter>("staff_letter", { messageId });
+}
+
+export async function summarizeMail(messageId: string): Promise<StaffSummary> {
+  if (!isTauri()) {
+    throw new Error("Summaries need the desktop app.");
+  }
+  return invoke<StaffSummary>("summarize_mail", { messageId });
+}
+
+export async function draftReply(messageId: string): Promise<StaffDraft> {
+  if (!isTauri()) {
+    throw new Error("Drafts need the desktop app.");
+  }
+  return invoke<StaffDraft>("draft_reply", { messageId });
 }

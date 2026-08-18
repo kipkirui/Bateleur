@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { loadInlineParts, saveAttachment } from "../api";
+import { draftReply, loadInlineParts, saveAttachment, staffLetter, summarizeMail } from "../api";
 import { hasRemoteImages, readableText, rewriteCidImages } from "../lib/emailHtml";
 import { formatWhen, lede, readingTime, sendFrequency } from "../lib/magazine";
 import { threadLetters } from "../lib/stories";
 import { Avatar } from "./Avatar";
 import { Letter, letterHtml } from "./Letter";
 import type { MailTo } from "../lib/links";
-import type { Account, Attachment, InlinePart, Message } from "../types";
+import type { Account, Attachment, InlinePart, Message, StaffStatus, StaffSummary } from "../types";
 
 type Props = {
   message: Message;
@@ -22,6 +22,9 @@ type Props = {
   onOpen: (id: string) => void;
   remoteImages: boolean;
   onRemoteImages: (on: boolean) => void;
+  staff: StaffStatus;
+  onHire: () => void;
+  onDraft: (body: string) => void;
 };
 
 export function Reader({
@@ -38,6 +41,9 @@ export function Reader({
   onOpen,
   remoteImages,
   onRemoteImages,
+  staff,
+  onHire,
+  onDraft,
 }: Props) {
   const html = letterHtml(message);
   const files = (message.attachments ?? []).filter((a) => !a.inline);
@@ -45,6 +51,10 @@ export function Reader({
   const [thisLetter, setThisLetter] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
+  const [summary, setSummary] = useState<StaffSummary | null>(null);
+  const [savedDraft, setSavedDraft] = useState<string | null>(null);
+  const [staffBusy, setStaffBusy] = useState<"summarize" | "draft" | null>(null);
+  const [staffError, setStaffError] = useState<string | null>(null);
   const quote = lede(message);
   const thread = threadLetters(mailbox, message);
   const related = mailbox
@@ -79,6 +89,25 @@ export function Reader({
 
   useEffect(() => {
     setThisLetter(false);
+    setSummary(null);
+    setSavedDraft(null);
+    setStaffError(null);
+    let cancelled = false;
+    void staffLetter(message.id)
+      .then((notes) => {
+        if (cancelled) return;
+        setSummary(notes.summary);
+        setSavedDraft(notes.draft);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSummary(null);
+          setSavedDraft(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [message.id]);
 
   const allowRemote = remoteImages || thisLetter;
@@ -99,6 +128,34 @@ export function Reader({
       setSavingId(null);
     }
   }
+
+  async function onSummarize() {
+    setStaffBusy("summarize");
+    setStaffError(null);
+    try {
+      setSummary(await summarizeMail(message.id));
+    } catch (err) {
+      setStaffError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStaffBusy(null);
+    }
+  }
+
+  async function onStaffDraft() {
+    setStaffBusy("draft");
+    setStaffError(null);
+    try {
+      const next = await draftReply(message.id);
+      setSavedDraft(next.body);
+      onDraft(next.body);
+    } catch (err) {
+      setStaffError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStaffBusy(null);
+    }
+  }
+
+  const showStaff = staff.summarize || staff.drafts;
 
   return (
     <div className="overlay" role="dialog" aria-modal="true">
@@ -130,6 +187,79 @@ export function Reader({
         <h1 className="article-hed">{readableText(message.subject)}</h1>
         <p className="read-time">{readingTime(message)}</p>
         {quote ? <blockquote className="lede-quote">{quote}</blockquote> : null}
+        {showStaff ? (
+          <aside className="staff-note">
+            <div className="rail-label">Staff</div>
+            {summary ? <p className="staff-blurb">{summary.blurb}</p> : null}
+            {summary?.keywords.length ? (
+              <p className="staff-keys">
+                {summary.keywords.map((word) => (
+                  <span key={word} className="badge">
+                    {word}
+                  </span>
+                ))}
+              </p>
+            ) : null}
+            {!summary && staff.summarize && !staffError ? (
+              <p className="muted">
+                {staff.hired
+                  ? "Summarize this letter. The body goes only to your provider."
+                  : "Hire staff and paste a key to summarize."}
+              </p>
+            ) : null}
+            {staffError ? <p className="muted staff-error">{staffError}</p> : null}
+            <div className="staff-note-actions">
+              {staff.summarize ? (
+                staff.hired ? (
+                  <button
+                    type="button"
+                    className="text-btn"
+                    disabled={staffBusy !== null}
+                    onClick={() => void onSummarize()}
+                  >
+                    {staffBusy === "summarize"
+                      ? "Summarizing…"
+                      : summary
+                        ? "Summarize again"
+                        : "Summarize this letter"}
+                  </button>
+                ) : (
+                  <button type="button" className="text-btn" onClick={onHire}>
+                    Hire staff to summarize
+                  </button>
+                )
+              ) : null}
+              {staff.drafts ? (
+                staff.hired ? (
+                  <>
+                    <button
+                      type="button"
+                      className="text-btn"
+                      disabled={staffBusy !== null}
+                      onClick={() => void onStaffDraft()}
+                    >
+                      {staffBusy === "draft" ? "Drafting…" : "Draft a reply"}
+                    </button>
+                    {savedDraft ? (
+                      <button
+                        type="button"
+                        className="text-btn"
+                        disabled={staffBusy !== null}
+                        onClick={() => onDraft(savedDraft)}
+                      >
+                        Open last draft
+                      </button>
+                    ) : null}
+                  </>
+                ) : (
+                  <button type="button" className="text-btn" onClick={onHire}>
+                    Hire staff to draft
+                  </button>
+                )
+              ) : null}
+            </div>
+          </aside>
+        ) : null}
         {thread.length >= 3 ? (
           <ol className="thread-toc">
             {thread.map((item, index) => (

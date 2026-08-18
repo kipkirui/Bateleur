@@ -8,6 +8,14 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.15.0] - 2026-08-18
+
+### Added
+
+- Hire staff stores the API key in the OS keychain (`bateleur.staff`) and provider / model / capability switches in SQLite. Mail bodies go only to the provider you pick — no Bateleur proxy
+- **Summarize this message** in the reader when that switch is on. The blurb is kept with the letter
+- **Draft a reply** opens Compose with generated text. Send is still a second step; the desk never sends. Mail still works if a call fails
+
 ## [0.14.3] - 2026-08-18
 
 ### Fixed

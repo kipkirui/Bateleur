@@ -1,8 +1,10 @@
 use keyring::credential::CredentialPersistence;
 use keyring::Entry;
 
-/// Service name for IMAP passwords. Kept distinct from a future SMTP/AI key.
+/// Service name for IMAP passwords. Staff keys use `bateleur.staff`.
 const SERVICE: &str = "bateleur.imap";
+const STAFF_SERVICE: &str = "bateleur.staff";
+const STAFF_USER: &str = "byok";
 
 pub fn save_password(address: &str, password: &str) -> Result<(), String> {
     ensure_persistent_store()?;
@@ -40,6 +42,41 @@ pub fn delete_password(address: &str) -> Result<(), String> {
         let _ = item.delete_credential();
     }
     Ok(())
+}
+
+pub fn save_staff_key(key: &str) -> Result<(), String> {
+    ensure_persistent_store()?;
+    staff_entry()?.set_password(key).map_err(err)?;
+    let readback = staff_entry()?.get_password().map_err(err)?;
+    if readback != key {
+        return Err("Staff key did not round-trip through the OS keychain.".into());
+    }
+    Ok(())
+}
+
+pub fn load_staff_key() -> Result<String, String> {
+    match staff_entry()?.get_password() {
+        Ok(key) => Ok(key),
+        Err(keyring::Error::NoEntry) => {
+            Err("Staff has no key. Hire staff and paste one.".into())
+        }
+        Err(other) => Err(err(other)),
+    }
+}
+
+pub fn staff_key_present() -> bool {
+    matches!(staff_entry().and_then(|e| e.get_password().map_err(err)), Ok(key) if !key.is_empty())
+}
+
+pub fn delete_staff_key() -> Result<(), String> {
+    if let Ok(item) = staff_entry() {
+        let _ = item.delete_credential();
+    }
+    Ok(())
+}
+
+fn staff_entry() -> Result<Entry, String> {
+    Entry::new(STAFF_SERVICE, STAFF_USER).map_err(err)
 }
 
 fn ensure_persistent_store() -> Result<(), String> {
