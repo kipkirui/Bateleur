@@ -11,6 +11,7 @@ type Props = {
   onFeed: (feed: FeedId) => void;
   waiting: number;
   awaiting: number;
+  uncertain: number;
   radar: number;
   folders: MailFolder[];
   mode: ReaderMode;
@@ -44,6 +45,7 @@ export function Rail({
   onFeed,
   waiting,
   awaiting,
+  uncertain,
   radar,
   folders,
   mode,
@@ -91,6 +93,21 @@ export function Rail({
                 <span className="await-label">Awaiting a reply</span>
                 <span className="rail-stat-hint">
                   Their turn. Flagged to chase, or sent with no answer in four days.
+                </span>
+              </span>
+            </button>
+          ) : null}
+          {uncertain > 0 ? (
+            <button
+              type="button"
+              className={feed === "uncertain" ? "await-badge active" : "await-badge"}
+              onClick={() => onFeed(feed === "uncertain" ? "action" : "uncertain")}
+            >
+              <span className="await-count">{uncertain}</span>
+              <span className="await-copy">
+                <span className="await-label">Uncertain</span>
+                <span className="rail-stat-hint">
+                  A weak phrase matched. Put these on Action or Reading — the guess stays off the front page.
                 </span>
               </span>
             </button>

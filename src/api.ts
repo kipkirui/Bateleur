@@ -185,6 +185,14 @@ export async function moveToReading(messageId: string): Promise<Mailbox> {
   return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, null);
 }
 
+export async function moveToAction(messageId: string): Promise<Mailbox> {
+  if (!isTauri()) {
+    throw new Error("Classification needs the desktop app.");
+  }
+  const mailbox = await invoke<Mailbox>("move_to_action", { messageId });
+  return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, null);
+}
+
 export async function resetSender(email: string): Promise<Mailbox> {
   if (!isTauri()) {
     throw new Error("Classification needs the desktop app.");

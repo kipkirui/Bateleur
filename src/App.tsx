@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadComposeAttachments, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, saveMailDraft, saveStoryOverrides, searchMail, sendMail, setFlag, setMailAlerts, staffBrief as loadStaffBrief, staffStatus as loadStaffStatus, storyOverrides as loadStoryOverrides, summarizeAccount as writeStaffBrief, syncAccount } from "./api";
+import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadComposeAttachments, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToAction, moveToReading, removeAccount, resetSender, saveMailDraft, saveStoryOverrides, searchMail, sendMail, setFlag, setMailAlerts, staffBrief as loadStaffBrief, staffStatus as loadStaffStatus, storyOverrides as loadStoryOverrides, summarizeAccount as writeStaffBrief, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -875,6 +875,16 @@ export default function App() {
     }
   }
 
+  async function onAction(message: Message) {
+    try {
+      const next = await moveToAction(message.id);
+      setMailbox(next);
+      setToast("Moved to Action");
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   function openSender(message: Message) {
     setSenderEmail(message.fromEmail);
     setOverlay("sender");
@@ -1078,6 +1088,8 @@ export default function App() {
                 ? "Nothing you're waiting on. Flag a letter to chase a reply, or a sent letter with no answer after four days shows up here."
                 : feed === "radar"
                   ? "No meeting invites in this mailbox. Radar only lists calendar parts that already arrived as mail."
+                : feed === "uncertain"
+                  ? "Nothing uncertain. Weak matches land here instead of guessing Action."
                 : feed === "action"
                   ? "Nothing needs you right now."
                   : "Nothing in this feed.";
@@ -1096,6 +1108,14 @@ export default function App() {
       label: "Radar",
       run: () => {
         setFeed("radar");
+        setOverlay("none");
+      },
+    },
+    {
+      id: "uncertain",
+      label: "Uncertain",
+      run: () => {
+        setFeed("uncertain");
         setOverlay("none");
       },
     },
@@ -1317,6 +1337,7 @@ export default function App() {
         onFeed={setFeed}
         waiting={waitingFor(messages, accountId)}
         awaiting={awaiting.length}
+        uncertain={inbox.filter((m) => m.feed === "uncertain").length}
         radar={inbox.filter((m) => m.invite).length}
         sync={syncCaption(syncByAccount, accountId)}
         folders={mailbox?.folders ?? []}
@@ -1370,6 +1391,7 @@ export default function App() {
         onArchive={(message) => onArchive(message)}
         onReply={(message) => openCompose(message)}
         onReading={(message) => void onReading(message)}
+        onAction={(message) => void onAction(message)}
         onSender={openSender}
         onBulkArchive={bulkArchive}
         onBulkFlag={bulkFlag}
@@ -1430,6 +1452,12 @@ export default function App() {
           onUnread={() => void onSetFlag(selected, { seen: false })}
           onFlag={() => void onSetFlag(selected, { flagged: !selected.flagged })}
           onArchive={() => void onArchive(selected)}
+          onAction={
+            selected.feed === "uncertain" ? () => void onAction(selected) : undefined
+          }
+          onReading={
+            selected.feed === "uncertain" ? () => void onReading(selected) : undefined
+          }
           onMailTo={openMailTo}
           onSender={() => openSender(selected)}
           onOpen={(id) => setSelectedId(id)}

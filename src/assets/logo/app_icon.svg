@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#000000"/>
+  <defs>
+    <linearGradient id="envelope" x1="2" y1="4.16" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A92580"/>
+      <stop offset="1" stop-color="#F7BC00"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(512 512) scale(32) translate(-12 -13.08)">
+    <path
+      fill="url(#envelope)"
+      fill-rule="evenodd"
+      clip-rule="evenodd"
+      d="M12.486 4.157a.99.99 0 0 0-.972 0l-7 3.946c-.13.073-.24.174-.324.292l7.255 4.908a.99.99 0 0 0 1.11 0l7.256-4.908a1 1 0 0 0-.325-.292zm9.485 4.409a3.04 3.04 0 0 0-1.514-2.237l-7-3.946a2.96 2.96 0 0 0-2.914 0l-7 3.946A3.05 3.05 0 0 0 2.03 8.566a1 1 0 0 0-.027.31L2 8.99v9.966C2 20.637 3.343 22 5 22h14c1.657 0 3-1.363 3-3.044V8.99q0-.057-.002-.114a1 1 0 0 0-.027-.31"
+    />
+  </g>
+</svg>

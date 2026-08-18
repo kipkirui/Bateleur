@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.23.0] - 2026-08-18
+
+### Added
+
+- **Uncertain** is a quiet rail tray for weak classifier matches (bare “invoice”, marketing invites, password newsletters). 2FA, payment-due invoices, please-reply, and calendar parts stay Action. Put a letter on Action or Reading; that placement survives the next sync
+
 ## [0.22.0] - 2026-08-18
 
 ### Added

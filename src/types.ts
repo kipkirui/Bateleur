@@ -16,7 +16,7 @@ export type Account = {
 export type Message = {
   id: string;
   accountId: string;
-  feed: "action" | "reading";
+  feed: "action" | "reading" | "uncertain";
   fromName: string;
   fromEmail: string;
   subject: string;
@@ -141,6 +141,7 @@ export type FlagChange = {
 export type FeedId =
   | "action"
   | "reading"
+  | "uncertain"
   | "awaiting"
   | "radar"
   | "sent"

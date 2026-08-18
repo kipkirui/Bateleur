@@ -22,6 +22,7 @@ type Props = {
   onArchive: (message: Message) => void;
   onReply: (message: Message) => void;
   onReading: (message: Message) => void;
+  onAction: (message: Message) => void;
   onSender: (message: Message) => void;
   onBulkArchive: () => void;
   onBulkFlag: () => void;
@@ -52,6 +53,7 @@ export function Feed({
   onArchive,
   onReply,
   onReading,
+  onAction,
   onSender,
   onBulkArchive,
   onBulkFlag,
@@ -208,6 +210,47 @@ export function Feed({
                           Dismiss
                         </button>
                       ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )
+        ) : feed === "uncertain" ? (
+          messages.length === 0 ? (
+            <div className="empty">{emptyLabel}</div>
+          ) : (
+            <div className="magazine">
+              <div className="block">
+                <h2>Uncertain</h2>
+                <p className="muted await-lede">
+                  A weak phrase matched. These stay off Action until you put them on Action or Reading.
+                </p>
+                <ul className="await-list">
+                  {messages.map((message) => (
+                    <li key={message.id}>
+                      <button
+                        type="button"
+                        className={`await-row${selectedId === message.id ? " selected" : ""}`}
+                        onClick={() => onSelect(message.id)}
+                        onDoubleClick={() => onOpen(message.id)}
+                      >
+                        <span className="await-who">
+                          {readableText(message.fromName) || message.fromEmail}
+                        </span>
+                        <span className="await-why">
+                          {message.why ?? "Too thin to guess Action or Reading."}
+                        </span>
+                        <span className="await-subject">{readableText(message.subject)}</span>
+                      </button>
+                      <span className="card-actions">
+                        <button type="button" className="text-btn" onClick={() => onAction(message)}>
+                          Action
+                        </button>
+                        <button type="button" className="text-btn" onClick={() => onReading(message)}>
+                          Reading
+                        </button>
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -673,6 +716,7 @@ function Check({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 
 function feedHeading(feed: FeedId): string {
   if (feed === "reading") return "Reading";
+  if (feed === "uncertain") return "Uncertain";
   if (feed === "awaiting") return "Awaiting reply";
   if (feed === "radar") return "Radar";
   if (feed === "sent") return "Sent";

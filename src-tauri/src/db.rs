@@ -114,6 +114,7 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
 }
 
 pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
+    refresh_heuristic_feeds(conn)?;
     let mut accounts = Vec::new();
     let mut stmt = conn
         .prepare(
@@ -275,11 +276,7 @@ fn fill_invite(message: &mut Message, bytes: Option<&Vec<u8>>) {
     if message.invite.is_none() || message.folder == "junk" {
         return;
     }
-    if message
-        .why
-        .as_deref()
-        .is_some_and(|why| why.starts_with("Staff:") || why.starts_with("You moved this sender"))
-    {
+    if heuristic_locked(message.why.as_deref()) {
         return;
     }
     if keep_local_action(message.category.as_deref()) {
@@ -737,6 +734,7 @@ pub fn apply_fetch(
 ) -> Result<Mailbox, String> {
     replace_folders(conn, account_id, folders)?;
     let mut classified = messages.to_vec();
+    apply_editor_placements(conn, &mut classified)?;
     apply_staff_triage(conn, &mut classified)?;
     apply_sender_prefs(conn, &mut classified)?;
     for message in &classified {
@@ -877,13 +875,105 @@ pub fn set_staff_note(
     Ok(())
 }
 
+fn editor_placed(why: Option<&str>) -> bool {
+    matches!(why, Some("Moved to Reading.") | Some("You put this in Action."))
+        || why.is_some_and(|line| {
+            line.starts_with("You moved this sender") || line.starts_with("Staff:")
+        })
+}
+
+fn heuristic_locked(why: Option<&str>) -> bool {
+    editor_placed(why) || why == Some("This letter includes a calendar invite.")
+}
+
 fn fill_class(message: &mut Message) {
-    if message.why.is_some() || message.category.is_some() {
+    if heuristic_locked(message.why.as_deref()) {
+        return;
+    }
+    if message.folder != "inbox" {
+        if message.why.is_some() || message.category.is_some() {
+            return;
+        }
+        let class = classify_mail(&message.subject, &message.preview, &message.from_email);
+        message.category = class.category.map(|s| s.to_string());
+        message.why = Some(class.reason.to_string());
         return;
     }
     let class = classify_mail(&message.subject, &message.preview, &message.from_email);
+    message.feed = class.feed.to_string();
     message.category = class.category.map(|s| s.to_string());
     message.why = Some(class.reason.to_string());
+}
+
+fn refresh_heuristic_feeds(conn: &Connection) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, subject, preview, from_email, why FROM messages WHERE folder = 'inbox'",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+            ))
+        })
+        .map_err(err)?;
+    let mut updates = Vec::new();
+    for row in rows {
+        let (id, subject, preview, from_email, why) = row.map_err(err)?;
+        if heuristic_locked(why.as_deref()) {
+            continue;
+        }
+        let class = classify_mail(&subject, &preview, &from_email);
+        updates.push((
+            id,
+            class.feed.to_string(),
+            class.category.map(|s| s.to_string()),
+            class.reason.to_string(),
+        ));
+    }
+    drop(stmt);
+    for (id, feed, category, why) in updates {
+        conn.execute(
+            "UPDATE messages SET feed = ?1, category = ?2, why = ?3 WHERE id = ?4",
+            params![feed, category, why, id],
+        )
+        .map_err(err)?;
+    }
+    Ok(())
+}
+
+fn apply_editor_placements(conn: &Connection, messages: &mut [Message]) -> Result<(), String> {
+    for message in messages {
+        if message.folder != "inbox" {
+            continue;
+        }
+        let existing = conn.query_row(
+            "SELECT feed, category, why FROM messages WHERE id = ?1",
+            [&message.id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            },
+        );
+        let Ok((feed, category, why)) = existing else {
+            continue;
+        };
+        if !editor_placed(why.as_deref()) {
+            continue;
+        }
+        message.feed = feed;
+        message.category = category;
+        message.why = why;
+    }
+    Ok(())
 }
 
 fn sender_overrides(conn: &Connection) -> Result<HashMap<String, String>, String> {
@@ -1003,6 +1093,20 @@ pub fn apply_triage(
     )
     .map_err(err)?;
     Ok(())
+}
+
+pub fn move_to_action(conn: &Connection, message_id: &str) -> Result<Mailbox, String> {
+    conn.execute(
+        "UPDATE messages SET feed = 'action', why = ?1 WHERE id = ?2",
+        params!["You put this in Action.", message_id],
+    )
+    .map_err(err)?;
+    conn.execute(
+        "DELETE FROM staff_notes WHERE kind = 'triage' AND message_id = ?1",
+        [message_id],
+    )
+    .map_err(err)?;
+    load_mailbox(conn)
 }
 
 pub fn move_to_reading(conn: &Connection, message_id: &str) -> Result<Mailbox, String> {

@@ -687,6 +687,12 @@ fn move_to_reading(state: State<AppState>, message_id: String) -> Result<Mailbox
 }
 
 #[tauri::command]
+fn move_to_action(state: State<AppState>, message_id: String) -> Result<Mailbox, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::move_to_action(&conn, &message_id)
+}
+
+#[tauri::command]
 fn reset_sender(state: State<AppState>, email: String) -> Result<Mailbox, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     db::reset_sender(&conn, &email)
@@ -913,6 +919,7 @@ pub fn run() {
             mail_alerts,
             set_mail_alerts,
             move_to_reading,
+            move_to_action,
             reset_sender,
             lock_sender_reading,
             search_mail,

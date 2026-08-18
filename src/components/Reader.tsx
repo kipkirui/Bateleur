@@ -22,6 +22,8 @@ type Props = {
   onMailTo: (mail: MailTo) => void;
   onSender: () => void;
   onOpen: (id: string) => void;
+  onAction?: () => void;
+  onReading?: () => void;
   remoteImages: boolean;
   onRemoteImages: (on: boolean) => void;
   staff: StaffStatus;
@@ -45,6 +47,8 @@ export function Reader({
   onMailTo,
   onSender,
   onOpen,
+  onAction,
+  onReading,
   remoteImages,
   onRemoteImages,
   staff,
@@ -454,6 +458,16 @@ export function Reader({
             <button type="button" className="text-btn" onClick={onForward}>
               Forward
             </button>
+            {onAction ? (
+              <button type="button" className="text-btn" onClick={onAction}>
+                Action
+              </button>
+            ) : null}
+            {onReading ? (
+              <button type="button" className="text-btn" onClick={onReading}>
+                Reading
+              </button>
+            ) : null}
           </div>
           <button type="button" className="desk-cta" onClick={onReply}>
             Reply
