@@ -48,7 +48,7 @@ export function defaultStaffModel(provider: StaffProvider): string {
     case "anthropic":
       return "claude-3-5-haiku-latest";
     case "gemini":
-      return "gemini-2.0-flash";
+      return "gemini-flash-latest";
     case "openrouter":
       return "openai/gpt-4o-mini";
     case "compatible":

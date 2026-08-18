@@ -200,12 +200,8 @@ export function Reader({
                 ))}
               </p>
             ) : null}
-            {!summary && staff.summarize && !staffError ? (
-              <p className="muted">
-                {staff.hired
-                  ? "Summarize this letter. The body goes only to your provider."
-                  : "Hire staff and paste a key to summarize."}
-              </p>
+            {!summary && staff.summarize && !staffError && !staff.hired ? (
+              <p className="muted">Hire staff and paste a key to summarize.</p>
             ) : null}
             {staffError ? <p className="muted staff-error">{staffError}</p> : null}
             <div className="staff-note-actions">

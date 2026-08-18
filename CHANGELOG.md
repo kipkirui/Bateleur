@@ -8,7 +8,19 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
-## [0.15.0] - 2026-08-18
+## [0.15.2] - 2026-08-18
+
+### Fixed
+
+- Gemini defaults to `gemini-flash-latest`. If that id 404s, staff lists models for the key and retries with a Flash model this key can actually call
+
+
+
+### Fixed
+
+- Gemini staff calls use the OS certificate store (same as mail) and send the key in `x-goog-api-key` instead of the URL. A TLS or model error now shows the real reason instead of “Could not reach the provider”
+
+
 
 ### Added
 

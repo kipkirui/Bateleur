@@ -4,6 +4,7 @@ use bateleur_core::Message;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use std::time::Duration;
 
 const BODY_LIMIT: usize = 8000;
@@ -239,7 +240,7 @@ fn openai_complete(
         "compatible" => chat_completions_url(&runtime.endpoint)?,
         _ => return Err("Unknown staff provider.".into()),
     };
-    let mut req = agent()
+    let mut req = agent()?
         .post(&url)
         .set("Authorization", &format!("Bearer {}", runtime.key))
         .set("Content-Type", "application/json");
@@ -269,7 +270,7 @@ fn openai_complete(
 
 fn anthropic_complete(key: &str, model: &str, system: &str, user: &str) -> Result<String, String> {
     let value = send_json(
-        agent()
+        agent()?
             .post("https://api.anthropic.com/v1/messages")
             .set("x-api-key", key)
             .set("anthropic-version", "2023-06-01")
@@ -298,16 +299,27 @@ fn anthropic_complete(key: &str, model: &str, system: &str, user: &str) -> Resul
 }
 
 fn gemini_complete(key: &str, model: &str, system: &str, user: &str) -> Result<String, String> {
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
-    );
+    let requested = gemini_model_name(model);
+    match gemini_generate(key, &requested, system, user) {
+        Ok(text) => Ok(text),
+        Err(err) if looks_like_missing_model(&err) => {
+            match discover_gemini_model(key) {
+                Ok(found) if found != requested => gemini_generate(key, &found, system, user),
+                _ => Err(err),
+            }
+        }
+        Err(err) => Err(err),
+    }
+}
+
+fn gemini_generate(key: &str, model: &str, system: &str, user: &str) -> Result<String, String> {
     let value = send_json(
-        agent()
-            .post(&url)
+        agent()?
+            .post(&gemini_url(model))
+            .set("x-goog-api-key", key)
             .set("Content-Type", "application/json"),
         json!({
-            "system_instruction": {"parts": [{"text": system}]},
-            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "contents": [{"parts": [{"text": format!("{system}\n\n{user}")}]}],
             "generationConfig": {"temperature": 0.2, "maxOutputTokens": 512}
         }),
     )?;
@@ -324,23 +336,161 @@ fn send_json(req: ureq::Request, body: Value) -> Result<Value, String> {
             .into_json()
             .map_err(|_| "The provider returned a reply we could not read.".into()),
         Err(ureq::Error::Status(code, resp)) => {
-            let _ = resp.into_string();
-            Err(status_error(code))
+            let body = resp.into_string().unwrap_or_default();
+            Err(status_error(code, &body))
         }
-        Err(_) => Err("Could not reach the provider.".into()),
+        Err(ureq::Error::Transport(err)) => Err(transport_error(&err)),
     }
 }
 
-fn status_error(code: u16) -> String {
+fn status_error(code: u16, body: &str) -> String {
+    let detail = provider_message(body);
     match code {
-        401 | 403 => "The provider refused the key.".into(),
+        401 | 403 => match detail {
+            Some(msg) => format!("The provider refused the key. {msg}"),
+            None => "The provider refused the key.".into(),
+        },
+        404 => match detail {
+            Some(msg) => format!("That Gemini model was not found. {msg}"),
+            None => "That Gemini model was not found. Set Model in Hire staff to gemini-flash-latest.".into(),
+        },
         429 => "The provider asked us to slow down.".into(),
-        _ => format!("The provider returned {code}."),
+        _ => detail.unwrap_or_else(|| format!("The provider returned {code}.")),
     }
 }
 
-fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new().timeout(TIMEOUT).build()
+fn provider_message(body: &str) -> Option<String> {
+    let value: Value = serde_json::from_str(body).ok()?;
+    let msg = value["error"]["message"]
+        .as_str()
+        .or_else(|| value["message"].as_str())?
+        .trim();
+    if msg.is_empty() || msg.len() > 240 {
+        return None;
+    }
+    Some(msg.to_string())
+}
+
+fn transport_error(err: &ureq::Transport) -> String {
+    match err.kind() {
+        ureq::ErrorKind::Dns => "Could not resolve the provider host.".into(),
+        ureq::ErrorKind::ConnectionFailed => {
+            "Could not open a TLS connection to the provider.".into()
+        }
+        ureq::ErrorKind::Io => "The connection to the provider dropped.".into(),
+        ureq::ErrorKind::InvalidUrl => "The provider URL is not valid.".into(),
+        _ => match err.message() {
+            Some(msg) if !msg.is_empty() && msg.len() < 160 && !msg.contains("key=") => {
+                format!("Could not reach the provider. {msg}")
+            }
+            _ => "Could not reach the provider.".into(),
+        },
+    }
+}
+
+fn agent() -> Result<ureq::Agent, String> {
+    let mut tls = crate::tls::client_config(false)?;
+    tls.alpn_protocols = vec![b"http/1.1".to_vec()];
+    Ok(ureq::AgentBuilder::new()
+        .timeout(TIMEOUT)
+        .tls_config(Arc::new(tls))
+        .build())
+}
+
+fn gemini_url(model: &str) -> String {
+    format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
+        gemini_model_name(model)
+    )
+}
+
+fn gemini_model_name(model: &str) -> String {
+    let name = model.trim().trim_start_matches("models/");
+    let name = name.split(':').next().unwrap_or(name).trim();
+    let cleaned: String = name
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        .collect();
+    if cleaned.is_empty() {
+        "gemini-flash-latest".into()
+    } else {
+        cleaned
+    }
+}
+
+fn looks_like_missing_model(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("not found") || lower.contains("404")
+}
+
+fn discover_gemini_model(key: &str) -> Result<String, String> {
+    let value = match agent()?
+        .get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200")
+        .set("x-goog-api-key", key)
+        .call()
+    {
+        Ok(resp) => resp
+            .into_json::<Value>()
+            .map_err(|_| "Could not read the Gemini model list.".to_string())?,
+        Err(ureq::Error::Status(code, resp)) => {
+            let body = resp.into_string().unwrap_or_default();
+            return Err(status_error(code, &body));
+        }
+        Err(ureq::Error::Transport(err)) => return Err(transport_error(&err)),
+    };
+    pick_gemini_model(&gemini_model_names(&value)).ok_or_else(|| {
+        "This Gemini key has no generateContent model. Set Model in Hire staff.".into()
+    })
+}
+
+fn gemini_model_names(value: &Value) -> Vec<String> {
+    let Some(models) = value["models"].as_array() else {
+        return Vec::new();
+    };
+    models
+        .iter()
+        .filter(|model| model_supports_generate(model))
+        .filter_map(|model| model["name"].as_str().map(gemini_model_name))
+        .filter(|name| !name.is_empty())
+        .collect()
+}
+
+fn model_supports_generate(model: &Value) -> bool {
+    let methods = model["supportedGenerationMethods"]
+        .as_array()
+        .or_else(|| model["supportedActions"].as_array());
+    match methods {
+        Some(items) => items.iter().any(|item| item.as_str() == Some("generateContent")),
+        None => true,
+    }
+}
+
+fn pick_gemini_model(names: &[String]) -> Option<String> {
+    const PREFERRED: &[&str] = &[
+        "gemini-flash-latest",
+        "gemini-2.5-flash",
+        "gemini-3.5-flash",
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash-lite",
+        "gemini-flash-lite-latest",
+    ];
+    for pref in PREFERRED {
+        if names.iter().any(|name| name == pref) {
+            return Some((*pref).to_string());
+        }
+    }
+    names
+        .iter()
+        .find(|name| {
+            let lower = name.to_ascii_lowercase();
+            lower.contains("flash")
+                && !lower.contains("tts")
+                && !lower.contains("image")
+                && !lower.contains("live")
+                && !lower.contains("audio")
+        })
+        .cloned()
+        .or_else(|| names.first().cloned())
 }
 
 fn parse_provider(raw: &str) -> Result<&'static str, String> {
@@ -362,7 +512,7 @@ fn resolved_model(provider: &str, model: &str) -> Result<String, String> {
     match provider {
         "openai" => Ok("gpt-4o-mini".into()),
         "anthropic" => Ok("claude-3-5-haiku-latest".into()),
-        "gemini" => Ok("gemini-2.0-flash".into()),
+        "gemini" => Ok("gemini-flash-latest".into()),
         "openrouter" => Ok("openai/gpt-4o-mini".into()),
         "compatible" => Err("Choose a model for this endpoint.".into()),
         _ => Err("Unknown staff provider.".into()),
@@ -484,5 +634,37 @@ mod tests {
         assert_eq!(resolved_model("openai", "").unwrap(), "gpt-4o-mini");
         assert!(resolved_model("compatible", "").is_err());
         assert_eq!(resolved_model("gemini", "gemini-2.5-flash").unwrap(), "gemini-2.5-flash");
+        assert_eq!(resolved_model("gemini", "").unwrap(), "gemini-flash-latest");
+    }
+
+    #[test]
+    fn gemini_url_uses_google_colon() {
+        let url = gemini_url("models/gemini-flash-latest:generateContent");
+        assert_eq!(
+            url,
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+        );
+        assert!(!url.contains('?'));
+        assert!(!url.contains("key="));
+        assert!(!url.contains("%3A"));
+    }
+
+    #[test]
+    fn google_error_body_is_surfaced() {
+        let msg = status_error(
+            403,
+            r#"{"error":{"message":"API key not valid. Please pass a valid API key."}}"#,
+        );
+        assert!(msg.contains("API key not valid"));
+    }
+
+    #[test]
+    fn picks_flash_latest_from_model_list() {
+        let names = vec![
+            "gemini-2.5-pro".into(),
+            "gemini-flash-latest".into(),
+            "gemini-2.5-flash-preview-tts".into(),
+        ];
+        assert_eq!(pick_gemini_model(&names).unwrap(), "gemini-flash-latest");
     }
 }
