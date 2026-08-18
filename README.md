@@ -24,7 +24,7 @@ This is a universal IMAP/POP client, not a Gmail wrapper. Add any mailbox. Mail 
 
 ## Status
 
-Early (0.7.0). You can add an IMAP or POP mailbox, sync INBOX / Sent / Drafts / Junk (IMAP), read HTML mail as designed, send through SMTP after a second confirm (IMAP APPENDs a copy to Sent), archive / unread / flag, and open or attach files. Remote images stay off until you load them. IMAP inboxes are watched with IDLE; POP is polled. OAuth and staff are still open.
+Early (0.8.0). You can add an IMAP or POP mailbox (app password or Sign in with Google / Microsoft), sync INBOX / Sent / Drafts / Junk (IMAP), read HTML mail as designed, send through SMTP after a second confirm (IMAP APPENDs a copy to Sent), archive / unread / flag, and open or attach files. Remote images stay off until you load them. IMAP inboxes are watched with IDLE; POP is polled. Staff is still open.
 
 Living checklist: [`STATUS.md`](./STATUS.md).  
 Product thesis: [`Make Email Great Again.md`](./Make%20Email%20Great%20Again.md).
@@ -59,7 +59,7 @@ Add a mailbox from **Settings**. IMAP or POP login is tested immediately; the pa
 
 If Sync says there is no password in the OS keychain, add the mailbox again from Settings with the same address — that writes the secret into Credential Manager. Re-adding updates the existing mailbox; it does not duplicate it.
 
-Gmail needs a 16-letter [App password](https://myaccount.google.com/apppasswords) (not the Google account password). Outlook.com usually needs an app password too. Enable IMAP or POP in the provider’s settings first.
+Gmail and Outlook can **Sign in with Google / Microsoft** (still IMAP/SMTP, not a vendor mail API). That needs a one-time Desktop / public OAuth client ID in Settings, or `BATELEUR_GOOGLE_OAUTH_CLIENT_ID` / `BATELEUR_MICROSOFT_OAUTH_CLIENT_ID`. App passwords still work: Gmail’s 16-letter [App password](https://myaccount.google.com/apppasswords) (not the Google account password). Enable IMAP or POP in the provider’s settings first.
 
 If the server certificate is untrusted, tick **Trust this server's certificate** and connect again.
 

@@ -87,20 +87,28 @@ fn login(account: &Account, password: &str) -> Result<PopSession, String> {
         .as_deref()
         .filter(|u| !u.is_empty())
         .unwrap_or(account.address.as_str());
+
+    let mut session = connect_tls(host, port, account.trust_tls)?;
+    session.expect_ok("greeting")?;
+    if crate::oauth::uses_xoauth2(account) {
+        let b64 = crate::oauth::sasl_xoauth2_b64(user, password);
+        session
+            .command(&format!("AUTH XOAUTH2 {b64}"))
+            .map_err(friendly)?;
+        return Ok(session);
+    }
     let password = compact_secret(password);
 
     if is_gmail(account) && !looks_like_google_app_password(&password) {
         return Err(
             "Gmail POP will not accept your Google account password, even if it is correct. \
              Turn on 2-Step Verification, then create a 16-letter App password at \
-             myaccount.google.com/apppasswords. Also enable POP in Gmail Settings → \
+             myaccount.google.com/apppasswords, or use Sign in with Google in Settings. Also enable POP in Gmail Settings → \
              Forwarding and POP/IMAP."
                 .into(),
         );
     }
 
-    let mut session = connect_tls(host, port, account.trust_tls)?;
-    session.expect_ok("greeting")?;
     session
         .command(&format!("USER {user}"))
         .map_err(friendly)?;
@@ -109,7 +117,7 @@ fn login(account: &Account, password: &str) -> Result<PopSession, String> {
         .map_err(|err| {
             if is_gmail(account) {
                 format!(
-                    "POP login was rejected. If this is Gmail, use a 16-letter App password, not your Google password. Server said: {err}"
+                    "POP login was rejected. If this is Gmail, use a 16-letter App password or Sign in with Google. Server said: {err}"
                 )
             } else {
                 friendly(err)

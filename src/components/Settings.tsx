@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { guessServers } from "../api";
+import { guessServers, oauthStatus, saveOAuthClients } from "../api";
 import { SecretField } from "./SecretField";
 import { ConfirmModal } from "./ConfirmModal";
-import type { Account, AccountDraft, ServerGuess } from "../types";
+import type { Account, AccountDraft, OAuthStatus, ServerGuess } from "../types";
 
 type Props = {
   accounts: Account[];
@@ -10,6 +10,7 @@ type Props = {
   error: string | null;
   onClose: () => void;
   onAdd: (draft: AccountDraft) => void;
+  onOAuth: (draft: AccountDraft, provider: "google" | "microsoft") => void;
   onSync: (accountId: string) => void;
   onRemove: (accountId: string) => void;
   removing?: boolean;
@@ -23,6 +24,7 @@ export function Settings({
   error,
   onClose,
   onAdd,
+  onOAuth,
   onSync,
   onRemove,
   removing = false,
@@ -42,6 +44,23 @@ export function Settings({
   const [trustTls, setTrustTls] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<Account | null>(null);
   const [guess, setGuess] = useState<ServerGuess | null>(null);
+  const [oauth, setOauth] = useState<OAuthStatus>({
+    google: false,
+    microsoft: false,
+    googleClientId: "",
+    microsoftClientId: "",
+  });
+  const [googleClient, setGoogleClient] = useState("");
+  const [microsoftClient, setMicrosoftClient] = useState("");
+  const [clientNote, setClientNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    oauthStatus().then((status) => {
+      setOauth(status);
+      setGoogleClient(status.googleClientId);
+      setMicrosoftClient(status.microsoftClientId);
+    });
+  }, []);
 
   useEffect(() => {
     const trimmed = address.trim();
@@ -85,6 +104,22 @@ export function Settings({
     }
   }, [error]);
 
+  function draft(): AccountDraft {
+    return {
+      address,
+      password,
+      label,
+      kind,
+      imapHost,
+      imapPort,
+      imapUser,
+      smtpHost,
+      smtpPort,
+      smtpUser,
+      trustTls,
+    };
+  }
+
   return (
     <div className="overlay" role="dialog" aria-modal="true">
       <div className="settings">
@@ -98,10 +133,11 @@ export function Settings({
         <section className="settings-section">
           <h2>Mail</h2>
           <p>
-            Add any IMAP or POP mailbox, like a desktop client. Password is
-            stored in the OS keychain, never in SQLite. Gmail and Outlook need
-            an app password. POP has no server folders — mail is ingested into
-            the local inbox and left on the server.
+            Add any IMAP or POP mailbox. App passwords still work. Gmail and
+            Outlook can Sign in with Google or Microsoft (IMAP/SMTP with
+            XOAUTH2 — not the Gmail API or Microsoft Graph). Tokens and
+            passwords stay in the OS keychain. POP has no server folders — mail
+            is ingested into the local inbox and left on the server.
           </p>
           <label className="check">
             <input
@@ -121,7 +157,8 @@ export function Settings({
                   <div>
                     <strong>{account.label}</strong>
                     <span className="nav-meta">
-                      {account.kind === "pop" ? "POP" : "IMAP"} · {account.address}
+                      {account.kind === "pop" ? "POP" : "IMAP"}
+                      {account.auth === "xoauth2" ? " · OAuth" : ""} · {account.address}
                     </span>
                   </div>
                   <div className="account-actions">
@@ -149,19 +186,7 @@ export function Settings({
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              onAdd({
-                address,
-                password,
-                label,
-                kind,
-                imapHost,
-                imapPort,
-                imapUser,
-                smtpHost,
-                smtpPort,
-                smtpUser,
-                trustTls,
-              });
+              onAdd(draft());
             }}
           >
             <label>
@@ -179,16 +204,16 @@ export function Settings({
                 value={password}
                 onChange={setPassword}
                 autoComplete="current-password"
-                required
               />
             </label>
             {address.toLowerCase().includes("@gmail.")
             || address.toLowerCase().includes("@googlemail.") ? (
               <p className="muted">
-                Gmail will reject your normal Google password. Create a 16-letter
-                App password at myaccount.google.com/apppasswords (2-Step
-                Verification must be on), and enable {kind === "pop" ? "POP" : "IMAP"}{" "}
-                in Gmail settings. Spaces in the app password are fine.
+                Gmail will reject your normal Google password. Use Sign in with
+                Google, or a 16-letter App password at
+                myaccount.google.com/apppasswords (2-Step Verification must be
+                on), and enable {kind === "pop" ? "POP" : "IMAP"} in Gmail
+                settings. Spaces in the app password are fine.
               </p>
             ) : null}
             <label>
@@ -265,18 +290,89 @@ export function Settings({
               Trust this server&apos;s certificate (self-signed or missing CA chain)
             </label>
             {error ? <p className="form-error">{error}</p> : null}
+            <div className="oauth-row">
+              <button
+                type="button"
+                className="text-btn"
+                disabled={busy || !address.includes("@")}
+                onClick={() => onOAuth(draft(), "google")}
+              >
+                {busy ? "Waiting for browser…" : "Sign in with Google"}
+              </button>
+              <button
+                type="button"
+                className="text-btn"
+                disabled={busy || !address.includes("@")}
+                onClick={() => onOAuth(draft(), "microsoft")}
+              >
+                Sign in with Microsoft
+              </button>
+            </div>
             <footer className="form-footer">
               <button type="submit" className="desk-cta" disabled={busy}>
                 {busy ? "Connecting…" : "Connect and fetch"}
               </button>
             </footer>
           </form>
+
+          <h3>OAuth client IDs</h3>
+          <p className="muted">
+            Public Desktop / public-client IDs, not secrets. Needed once so Sign
+            in can open Google or Microsoft. You can also set{" "}
+            <code>BATELEUR_GOOGLE_OAUTH_CLIENT_ID</code> and{" "}
+            <code>BATELEUR_MICROSOFT_OAUTH_CLIENT_ID</code>.
+          </p>
+          <label>
+            Google client ID
+            <input
+              value={googleClient}
+              onChange={(e) => setGoogleClient(e.target.value)}
+              placeholder="….apps.googleusercontent.com"
+              autoComplete="off"
+            />
+          </label>
+          <label>
+            Microsoft application ID
+            <input
+              value={microsoftClient}
+              onChange={(e) => setMicrosoftClient(e.target.value)}
+              placeholder="Azure app (client) ID"
+              autoComplete="off"
+            />
+          </label>
+          {clientNote ? <p className="muted">{clientNote}</p> : null}
+          {!oauth.google && !oauth.microsoft ? (
+            <p className="muted">
+              Sign in is off until a client ID is saved. App passwords still
+              work.
+            </p>
+          ) : null}
+          <footer className="form-footer">
+            <button
+              type="button"
+              className="text-btn"
+              onClick={() => {
+                saveOAuthClients(googleClient, microsoftClient)
+                  .then((status) => {
+                    setOauth(status);
+                    setClientNote("Client IDs saved on this computer.");
+                  })
+                  .catch((err: unknown) => {
+                    setClientNote(
+                      err instanceof Error ? err.message : String(err),
+                    );
+                  });
+              }}
+            >
+              Save client IDs
+            </button>
+          </footer>
         </section>
       </div>
       {pendingRemove ? (
         <ConfirmModal
           title="Disconnect this mailbox?"
-          body={`${pendingRemove.address} will be removed from Bateleur. Cached mail and the keychain password leave this computer. The mailbox on the server is not deleted.`}
+          body={`${pendingRemove.address} will be removed from Bateleur. Cached mail and the keychain password or OAuth tokens leave this computer. The mailbox on the server is not deleted.`}
           confirmLabel="Disconnect"
           danger
           busy={removing}

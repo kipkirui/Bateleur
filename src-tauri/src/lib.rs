@@ -1,6 +1,7 @@
 mod attach;
 mod db;
 mod imap;
+mod oauth;
 mod parse;
 mod pop;
 mod secrets;
@@ -93,6 +94,7 @@ async fn add_account(
             draft.smtp_user.trim().to_string()
         }),
         trust_tls: draft.trust_tls,
+        auth: "password".into(),
     };
 
     let password = draft.password.clone();
@@ -133,6 +135,174 @@ async fn add_account(
 }
 
 #[tauri::command]
+fn oauth_status(app: AppHandle) -> Result<oauth::OAuthStatus, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(oauth::status(&dir))
+}
+
+#[tauri::command]
+fn save_oauth_clients(
+    app: AppHandle,
+    google: String,
+    microsoft: String,
+) -> Result<oauth::OAuthStatus, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    oauth::save_clients(&dir, google, microsoft)?;
+    Ok(oauth::status(&dir))
+}
+
+#[tauri::command]
+async fn add_account_oauth(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    mut draft: AccountDraft,
+    provider: String,
+) -> Result<Mailbox, String> {
+    fill_draft_servers(&mut draft);
+    if draft.kind != "imap" && draft.kind != "pop" {
+        return Err("Choose IMAP or POP.".into());
+    }
+    if draft.address.trim().is_empty() {
+        return Err("Address is required.".into());
+    }
+    if draft.imap_host.trim().is_empty() {
+        return Err(if draft.kind == "pop" {
+            "POP host is required.".into()
+        } else {
+            "IMAP host is required.".into()
+        });
+    }
+
+    let account = account_from_draft(&state, &draft, "xoauth2")?;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let hint = account.address.clone();
+    let provider = provider.clone();
+    let tokens = tauri::async_runtime::spawn_blocking(move || {
+        oauth::sign_in(&dir, &provider, &hint, |url| {
+            tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    secrets::save_password(
+        &account.address,
+        &serde_json::to_string(&tokens).map_err(|e| e.to_string())?,
+    )?;
+    let password = tokens.access.clone();
+    let to_fetch = account.clone();
+    let known = if account.kind == "pop" {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::pop_uidls(&conn, &account.id).unwrap_or_default()
+    } else {
+        std::collections::HashSet::new()
+    };
+    let fetched = tauri::async_runtime::spawn_blocking(move || {
+        if to_fetch.kind == "pop" {
+            pop::fetch_account(&to_fetch, &password, &known)
+        } else {
+            imap::fetch_account(&to_fetch, &password)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    let mailbox = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::upsert_account(&conn, &account)?;
+        db::apply_fetch(
+            &conn,
+            &account.id,
+            &fetched.folders,
+            &fetched.messages,
+            &fetched.parts,
+            &fetched.pop_uidls,
+        )?
+    };
+    watch::start(app, account.id.clone());
+    Ok(mailbox)
+}
+
+fn fill_draft_servers(draft: &mut AccountDraft) {
+    let Some(guess) = guess_servers(&draft.address) else {
+        return;
+    };
+    if draft.imap_host.trim().is_empty() {
+        if draft.kind == "pop" {
+            draft.imap_host = guess.pop_host;
+            if draft.imap_port == 0 || draft.imap_port == 993 {
+                draft.imap_port = guess.pop_port;
+            }
+        } else {
+            draft.imap_host = guess.imap_host;
+            if draft.imap_port == 0 {
+                draft.imap_port = guess.imap_port;
+            }
+        }
+    }
+    if draft.smtp_host.trim().is_empty() {
+        draft.smtp_host = guess.smtp_host;
+        if draft.smtp_port == 0 {
+            draft.smtp_port = guess.smtp_port;
+        }
+    }
+    if draft.imap_user.trim().is_empty() {
+        draft.imap_user = guess.username.clone();
+    }
+    if draft.smtp_user.trim().is_empty() {
+        draft.smtp_user = guess.username;
+    }
+}
+
+fn account_from_draft(
+    state: &State<'_, AppState>,
+    draft: &AccountDraft,
+    auth: &str,
+) -> Result<Account, String> {
+    let local = draft
+        .address
+        .split('@')
+        .next()
+        .unwrap_or("account")
+        .to_string();
+    let address = draft.address.trim().to_lowercase();
+    let existing_id = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::get_account_by_address(&conn, &address)?.map(|a| a.id)
+    };
+    Ok(Account {
+        id: existing_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+        address,
+        label: if draft.label.trim().is_empty() {
+            local
+        } else {
+            draft.label.trim().to_string()
+        },
+        kind: if draft.kind == "pop" {
+            "pop".into()
+        } else {
+            "imap".into()
+        },
+        imap_host: Some(draft.imap_host.trim().to_string()),
+        imap_port: Some(draft.imap_port),
+        imap_user: Some(if draft.imap_user.trim().is_empty() {
+            draft.address.trim().to_lowercase()
+        } else {
+            draft.imap_user.trim().to_string()
+        }),
+        smtp_host: Some(draft.smtp_host.trim().to_string()),
+        smtp_port: Some(draft.smtp_port),
+        smtp_user: Some(if draft.smtp_user.trim().is_empty() {
+            draft.address.trim().to_lowercase()
+        } else {
+            draft.smtp_user.trim().to_string()
+        }),
+        trust_tls: draft.trust_tls,
+        auth: auth.into(),
+    })
+}
+
+#[tauri::command]
 async fn sync_account(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -154,7 +324,7 @@ async fn sync_account(
             message: None,
         },
     );
-    let password = secrets::load_password(&account.address)?;
+    let password = oauth::prepare_secret(&account)?;
     let to_fetch = account.clone();
     let known = if account.kind == "pop" {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
@@ -207,7 +377,7 @@ async fn send_mail(state: State<'_, AppState>, draft: SendDraft) -> Result<Mailb
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::get_account(&conn, &draft.account_id)?
     };
-    let password = secrets::load_password(&account.address)?;
+    let password = oauth::prepare_secret(&account)?;
     let to_send = account.clone();
     let payload = draft.clone();
     let (mut sent, rfc822, mut parts) =
@@ -215,7 +385,7 @@ async fn send_mail(state: State<'_, AppState>, draft: SendDraft) -> Result<Mailb
             .await
             .map_err(|e| e.to_string())??;
 
-    let password = secrets::load_password(&account.address)?;
+    let password = oauth::prepare_secret(&account)?;
     let to_append = account.clone();
     if account.kind == "imap" {
         if let Ok(Some((from_imap, imap_parts))) = tauri::async_runtime::spawn_blocking(move || {
@@ -259,7 +429,7 @@ async fn set_flag(state: State<'_, AppState>, change: FlagChange) -> Result<Mail
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::imap_name_for_folder(&conn, &account.id, &folder_key)?
     };
-    let password = secrets::load_password(&account.address)?;
+    let password = oauth::prepare_secret(&account)?;
     let to_run = account.clone();
     let seen = change.seen;
     let flagged = change.flagged;
@@ -303,7 +473,7 @@ async fn archive_message(
             db::archive_imap_name(&conn, &account.id)?,
         )
     };
-    let password = secrets::load_password(&account.address)?;
+    let password = oauth::prepare_secret(&account)?;
     let to_run = account.clone();
     tauri::async_runtime::spawn_blocking(move || {
         imap::archive_uid(&to_run, &password, &source_imap, &dest_imap, uid)
@@ -389,6 +559,9 @@ pub fn run() {
             mailbox,
             guess_account_servers,
             add_account,
+            add_account_oauth,
+            oauth_status,
+            save_oauth_clients,
             sync_account,
             send_mail,
             set_flag,

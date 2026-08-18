@@ -1,7 +1,7 @@
 use crate::attach::{self, StoredPart};
 use bateleur_core::{preview_text, Account, Message, SendDraft};
 use lettre::message::{header::ContentType, Attachment, Mailbox, MultiPart, SinglePart};
-use lettre::transport::smtp::authentication::Credentials;
+use lettre::transport::smtp::authentication::{Credentials, Mechanism};
 use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{Message as SmtpMessage, SmtpTransport, Transport};
 use std::str::FromStr;
@@ -29,7 +29,12 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
         .map(str::trim)
         .filter(|u| !u.is_empty())
         .unwrap_or(account.address.as_str());
-    let password: String = password.chars().filter(|c| !c.is_whitespace()).collect();
+    let oauth = crate::oauth::uses_xoauth2(account);
+    let secret = if oauth {
+        password.to_string()
+    } else {
+        password.chars().filter(|c| !c.is_whitespace()).collect()
+    };
 
     let from = mailbox_addr(Some(&account.label), &account.address)?;
     let recipients = parse_recipients(&draft.to)?;
@@ -57,8 +62,8 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
     let parts = attach::from_draft(&message_id, &draft.attachments)?;
     let email = build_letter(builder, &body, html, &parts)?;
 
-    let creds = Credentials::new(user.to_string(), password);
-    let mailer = transport(&host, port, account.trust_tls, creds)?;
+    let creds = Credentials::new(user.to_string(), secret);
+    let mailer = transport(&host, port, account.trust_tls, creds, oauth)?;
     mailer.send(&email).map_err(friendly)?;
     let rfc822 = email.formatted();
 
@@ -145,6 +150,7 @@ fn transport(
     port: u16,
     trust_anyway: bool,
     creds: Credentials,
+    xoauth2: bool,
 ) -> Result<SmtpTransport, String> {
     let tls = tls_parameters(host, trust_anyway)?;
     let builder = if port == 465 {
@@ -155,6 +161,11 @@ fn transport(
         SmtpTransport::starttls_relay(host)
             .map_err(|e| format!("SMTP STARTTLS ({e})"))?
             .tls(Tls::Required(tls))
+    };
+    let builder = if xoauth2 {
+        builder.authentication(vec![Mechanism::Xoauth2])
+    } else {
+        builder
     };
     Ok(builder.port(port).credentials(creds).build())
 }

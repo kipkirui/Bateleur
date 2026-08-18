@@ -9,7 +9,7 @@ before proposing a large feature.
 
 - Mail works with zero AI. Do not make a model required to read or send.
 - No Gmail API. No Microsoft Graph. Speak IMAP / POP / SMTP.
-- Passwords and API keys stay in the OS keychain, never in SQLite or logs.
+- Passwords, OAuth refresh tokens, and API keys stay in the OS keychain, never in SQLite or logs.
 - Send stays confirm-gated. Drafts never send themselves.
 - Do not add a cloud proxy for inference or mail.
 - Match the paper UI: cream / charcoal / amber, no emoji in chrome.

@@ -4,6 +4,7 @@ import type {
   FlagChange,
   InlinePart,
   Mailbox,
+  OAuthStatus,
   SendDraft,
   ServerGuess,
 } from "./types";
@@ -52,6 +53,34 @@ export async function addAccount(draft: AccountDraft): Promise<Mailbox> {
   }
   const mailbox = await invoke<Mailbox>("add_account", { draft });
   return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, null);
+}
+
+export async function addAccountOAuth(
+  draft: AccountDraft,
+  provider: "google" | "microsoft",
+): Promise<Mailbox> {
+  if (!isTauri()) {
+    throw new Error("Sign in needs the desktop app.");
+  }
+  const mailbox = await invoke<Mailbox>("add_account_oauth", { draft, provider });
+  return fromParts(mailbox.accounts, mailbox.messages, mailbox.folders, null);
+}
+
+export async function oauthStatus(): Promise<OAuthStatus> {
+  if (!isTauri()) {
+    return { google: false, microsoft: false, googleClientId: "", microsoftClientId: "" };
+  }
+  return invoke<OAuthStatus>("oauth_status");
+}
+
+export async function saveOAuthClients(
+  google: string,
+  microsoft: string,
+): Promise<OAuthStatus> {
+  if (!isTauri()) {
+    throw new Error("OAuth client IDs need the desktop app.");
+  }
+  return invoke<OAuthStatus>("save_oauth_clients", { google, microsoft });
 }
 
 export async function syncAccount(accountId: string): Promise<Mailbox> {

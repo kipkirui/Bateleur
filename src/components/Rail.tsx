@@ -85,7 +85,8 @@ export function Rail({
         >
           <span>{account.label}</span>
           <span className="nav-meta">
-            {account.kind === "pop" ? "POP" : "IMAP"} · {account.address}
+            {account.kind === "pop" ? "POP" : "IMAP"}
+            {account.auth === "xoauth2" ? " · OAuth" : ""} · {account.address}
           </span>
         </button>
       ))}

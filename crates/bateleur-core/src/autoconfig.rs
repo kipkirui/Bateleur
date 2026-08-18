@@ -63,6 +63,18 @@ pub fn guess_servers(address: &str) -> Option<ServerGuess> {
     })
 }
 
+pub fn oauth_provider(address: &str) -> Option<&'static str> {
+    let address = address.trim().to_lowercase();
+    let domain = address.split_once('@')?.1;
+    match domain {
+        "gmail.com" | "googlemail.com" => Some("google"),
+        "outlook.com" | "hotmail.com" | "live.com" | "msn.com" | "office365.com" => {
+            Some("microsoft")
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,6 +86,13 @@ mod tests {
         assert_eq!(guess.pop_host, "pop.gmail.com");
         assert_eq!(guess.pop_port, 995);
         assert_eq!(guess.smtp_host, "smtp.gmail.com");
+    }
+
+    #[test]
+    fn oauth_provider_from_domain() {
+        assert_eq!(oauth_provider("ed@gmail.com"), Some("google"));
+        assert_eq!(oauth_provider("ed@outlook.com"), Some("microsoft"));
+        assert_eq!(oauth_provider("ed@fastmail.com"), None);
     }
 
     #[test]

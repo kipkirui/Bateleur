@@ -8,6 +8,14 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.8.0] - 2026-08-18
+
+### Added
+
+- Sign in with Google or Microsoft (OAuth 2.0 PKCE). IMAP, POP, and SMTP use XOAUTH2 — not the Gmail API or Microsoft Graph
+- Refresh tokens live in the OS keychain; access tokens refresh before fetch and send
+- Optional Desktop / public-client IDs in Settings, or `BATELEUR_GOOGLE_OAUTH_CLIENT_ID` / `BATELEUR_MICROSOFT_OAUTH_CLIENT_ID`
+
 ## [0.7.0] - 2026-08-17
 
 ### Added

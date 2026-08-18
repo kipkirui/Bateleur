@@ -1,8 +1,8 @@
 # Security Policy
 
-Bateleur is a local-first mail client. It stores mailbox passwords in the OS
-keychain and mail in a local SQLite cache. Treat credential and mail-handling
-bugs as security issues.
+Bateleur is a local-first mail client. It stores mailbox passwords and OAuth
+refresh tokens in the OS keychain and mail in a local SQLite cache. Treat
+credential and mail-handling bugs as security issues.
 
 ## Supported versions
 
@@ -12,7 +12,7 @@ This project is pre-1.0. Report issues against the default branch.
 
 Please report privately if the issue could let someone:
 
-- Read or exfiltrate mailbox passwords or API keys
+- Read or exfiltrate mailbox passwords, OAuth tokens, or API keys
 - Access another person’s mail cache
 - Bypass TLS / certificate checks without an explicit user action
 - Execute script from a message body (XSS in the reader)

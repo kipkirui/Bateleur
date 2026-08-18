@@ -197,19 +197,28 @@ fn login(account: &Account, password: &str) -> Result<Session, String> {
         .as_deref()
         .filter(|u| !u.is_empty())
         .unwrap_or(account.address.as_str());
+    let client = connect_tls(host, port, account.trust_tls)?;
+    if crate::oauth::uses_xoauth2(account) {
+        let auth = crate::oauth::Xoauth2 {
+            user: user.to_string(),
+            access_token: password.to_string(),
+        };
+        return client
+            .authenticate("XOAUTH2", &auth)
+            .map_err(|e| friendly(e.0));
+    }
     let password = compact_secret(password);
 
     if is_gmail(account) && !looks_like_google_app_password(&password) {
         return Err(
             "Gmail IMAP will not accept your Google account password, even if it is correct. \
              Turn on 2-Step Verification, then create a 16-letter App password at \
-             myaccount.google.com/apppasswords. Also enable IMAP in Gmail Settings → \
+             myaccount.google.com/apppasswords, or use Sign in with Google in Settings. Also enable IMAP in Gmail Settings → \
              Forwarding and POP/IMAP."
                 .into(),
         );
     }
 
-    let client = connect_tls(host, port, account.trust_tls)?;
     client.login(user, password).map_err(|e| friendly(e.0))
 }
 

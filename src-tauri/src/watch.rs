@@ -1,6 +1,5 @@
 use crate::db;
 use crate::imap;
-use crate::secrets;
 use crate::AppState;
 use bateleur_core::Mailbox;
 use serde::Serialize;
@@ -126,7 +125,7 @@ fn refresh_account(app: &AppHandle, account_id: &str) -> Result<Mailbox, String>
         } else {
             std::collections::HashSet::new()
         };
-        let password = secrets::load_password(&account.address)?;
+        let password = crate::oauth::prepare_secret(&account)?;
         (account, password, known)
     };
     let to_fetch = account.clone();
@@ -159,7 +158,7 @@ fn credentials(
     if account.kind != "imap" && account.kind != "pop" {
         return Err("Only IMAP and POP accounts watch.".into());
     }
-    let password = secrets::load_password(&account.address)?;
+    let password = crate::oauth::prepare_secret(&account)?;
     Ok((account, password))
 }
 

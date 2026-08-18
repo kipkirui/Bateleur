@@ -8,6 +8,7 @@ export type Account = {
   address: string;
   label: string;
   kind?: string;
+  auth?: string;
   imapHost?: string | null;
   imapPort?: number | null;
 };
@@ -77,6 +78,14 @@ export type AccountDraft = {
   smtpPort: number;
   smtpUser: string;
   trustTls?: boolean;
+  auth?: string;
+};
+
+export type OAuthStatus = {
+  google: boolean;
+  microsoft: boolean;
+  googleClientId: string;
+  microsoftClientId: string;
 };
 
 export type SendDraft = {

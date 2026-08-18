@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { addAccount, archiveMessage, hydrateMailbox, isTauri, loadMailbox, removeAccount, sendMail, setFlag, syncAccount } from "./api";
+import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, removeAccount, sendMail, setFlag, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -153,6 +153,29 @@ export default function App() {
     setAccountError(null);
     try {
       const next = await addAccount(draft);
+      setMailbox(next);
+      const live =
+        next.accounts.find(
+          (a) => a.address.toLowerCase() === draft.address.trim().toLowerCase(),
+        ) ?? next.accounts[0];
+      if (live) setAccountId(live.id);
+      setSettingsNonce((n) => n + 1);
+      setToast("Mailbox connected");
+    } catch (err) {
+      setAccountError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAccountBusy(false);
+    }
+  }
+
+  async function onOAuthAccount(
+    draft: AccountDraft,
+    provider: "google" | "microsoft",
+  ) {
+    setAccountBusy(true);
+    setAccountError(null);
+    try {
+      const next = await addAccountOAuth(draft, provider);
       setMailbox(next);
       const live =
         next.accounts.find(
@@ -433,6 +456,7 @@ export default function App() {
           error={accountError}
           onClose={() => setOverlay("none")}
           onAdd={onAddAccount}
+          onOAuth={onOAuthAccount}
           onSync={onSync}
           onRemove={onRemoveAccount}
           removing={accountBusy}

@@ -72,6 +72,10 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
         "ALTER TABLE messages ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0",
         [],
     );
+    let _ = conn.execute(
+        "ALTER TABLE accounts ADD COLUMN auth TEXT NOT NULL DEFAULT 'password'",
+        [],
+    );
     Ok(conn)
 }
 
@@ -80,7 +84,7 @@ pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
     let mut stmt = conn
         .prepare(
             "SELECT id, address, label, kind, imap_host, imap_port, imap_user,
-                    smtp_host, smtp_port, smtp_user, trust_tls
+                    smtp_host, smtp_port, smtp_user, trust_tls, auth
              FROM accounts ORDER BY kind DESC, label",
         )
         .map_err(err)?;
@@ -151,8 +155,8 @@ pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
 pub fn upsert_account(conn: &Connection, account: &Account) -> Result<(), String> {
     conn.execute(
         "INSERT OR REPLACE INTO accounts
-         (id, address, label, kind, imap_host, imap_port, imap_user, smtp_host, smtp_port, smtp_user, trust_tls)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+         (id, address, label, kind, imap_host, imap_port, imap_user, smtp_host, smtp_port, smtp_user, trust_tls, auth)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         params![
             account.id,
             account.address,
@@ -165,6 +169,11 @@ pub fn upsert_account(conn: &Connection, account: &Account) -> Result<(), String
             account.smtp_port.map(|p| p as i64),
             account.smtp_user,
             account.trust_tls as i64,
+            if account.auth.is_empty() {
+                "password"
+            } else {
+                account.auth.as_str()
+            },
         ],
     )
     .map_err(err)?;
@@ -414,7 +423,7 @@ pub fn delete_message(conn: &Connection, id: &str) -> Result<(), String> {
 pub fn get_account(conn: &Connection, id: &str) -> Result<Account, String> {
     conn.query_row(
         "SELECT id, address, label, kind, imap_host, imap_port, imap_user,
-                smtp_host, smtp_port, smtp_user, trust_tls
+                smtp_host, smtp_port, smtp_user, trust_tls, auth
          FROM accounts WHERE id = ?1",
         [id],
         account_from_row,
@@ -426,7 +435,7 @@ pub fn get_account_by_address(conn: &Connection, address: &str) -> Result<Option
     let mut stmt = conn
         .prepare(
             "SELECT id, address, label, kind, imap_host, imap_port, imap_user,
-                    smtp_host, smtp_port, smtp_user, trust_tls
+                    smtp_host, smtp_port, smtp_user, trust_tls, auth
              FROM accounts WHERE lower(address) = lower(?1) LIMIT 1",
         )
         .map_err(err)?;
@@ -441,7 +450,7 @@ pub fn list_accounts(conn: &Connection) -> Result<Vec<Account>, String> {
     let mut stmt = conn
         .prepare(
             "SELECT id, address, label, kind, imap_host, imap_port, imap_user,
-                    smtp_host, smtp_port, smtp_user, trust_tls
+                    smtp_host, smtp_port, smtp_user, trust_tls, auth
              FROM accounts ORDER BY label",
         )
         .map_err(err)?;
@@ -574,6 +583,11 @@ fn account_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Account> {
         smtp_port: row.get::<_, Option<i64>>(8)?.map(|p| p as u16),
         smtp_user: row.get(9)?,
         trust_tls: row.get::<_, i64>(10).unwrap_or(0) != 0,
+        auth: row
+            .get::<_, String>(11)
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "password".into()),
     })
 }
 

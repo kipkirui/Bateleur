@@ -5,7 +5,7 @@ mod classify;
 mod folders;
 mod text;
 
-pub use autoconfig::{guess_servers, ServerGuess};
+pub use autoconfig::{guess_servers, oauth_provider, ServerGuess};
 pub use classify::classify_feed;
 pub use folders::{classify_imap_folder, ClassifiedFolder};
 pub use text::{html_to_plain, preview_text};
@@ -32,10 +32,16 @@ pub struct Account {
     pub smtp_user: Option<String>,
     #[serde(default)]
     pub trust_tls: bool,
+    #[serde(default = "password_auth")]
+    pub auth: String,
 }
 
 fn imap_kind() -> String {
     "imap".into()
+}
+
+fn password_auth() -> String {
+    "password".into()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,6 +127,8 @@ pub struct AccountDraft {
     pub smtp_user: String,
     #[serde(default)]
     pub trust_tls: bool,
+    #[serde(default)]
+    pub auth: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
