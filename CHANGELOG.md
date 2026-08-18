@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.26.2] - 2026-08-18
+
+### Fixed
+
+- Sign in with Google / Microsoft are amber buttons, not text links. Tapping them with an empty address now explains that you need the mailbox first. An unsaved client ID is written before the browser opens, and Microsoft shows Waiting for browser while it does
+
 ## [0.26.1] - 2026-08-18
 
 ### Fixed

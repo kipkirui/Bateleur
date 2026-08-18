@@ -57,6 +57,7 @@ export function Settings({
   const [googleClient, setGoogleClient] = useState("");
   const [microsoftClient, setMicrosoftClient] = useState("");
   const [clientNote, setClientNote] = useState<string | null>(null);
+  const [oauthPending, setOauthPending] = useState<"google" | "microsoft" | null>(null);
 
   useEffect(() => {
     oauthStatus().then((status) => {
@@ -108,6 +109,10 @@ export function Settings({
     }
   }, [error]);
 
+  useEffect(() => {
+    if (!busy) setOauthPending(null);
+  }, [busy]);
+
   function draft(): AccountDraft {
     return {
       address,
@@ -122,6 +127,29 @@ export function Settings({
       smtpUser,
       trustTls,
     };
+  }
+
+  async function startOAuth(provider: "google" | "microsoft") {
+    if (!address.trim().includes("@")) {
+      onOAuth(draft(), provider);
+      return;
+    }
+    setOauthPending(provider);
+    try {
+      if (
+        googleClient.trim() !== oauth.googleClientId ||
+        microsoftClient.trim() !== oauth.microsoftClientId
+      ) {
+        const status = await saveOAuthClients(googleClient, microsoftClient);
+        setOauth(status);
+        setClientNote("Client IDs saved on this computer.");
+      }
+    } catch (err) {
+      setOauthPending(null);
+      setClientNote(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    onOAuth(draft(), provider);
   }
 
   return (
@@ -302,22 +330,28 @@ export function Settings({
               Trust this server&apos;s certificate (self-signed or missing CA chain)
             </label>
             {error ? <p className="form-error">{error}</p> : null}
+            <p className="muted">
+              Sign in uses the address above. A password is not needed. Paste the
+              client IDs below if you have not already.
+            </p>
             <div className="oauth-row">
               <button
                 type="button"
-                className="text-btn"
-                disabled={busy || !address.includes("@")}
-                onClick={() => onOAuth(draft(), "google")}
+                className="desk-cta"
+                disabled={busy}
+                onClick={() => void startOAuth("google")}
               >
-                {busy ? "Waiting for browser…" : "Sign in with Google"}
+                {oauthPending === "google" ? "Waiting for browser…" : "Sign in with Google"}
               </button>
               <button
                 type="button"
-                className="text-btn"
-                disabled={busy || !address.includes("@")}
-                onClick={() => onOAuth(draft(), "microsoft")}
+                className="desk-cta"
+                disabled={busy}
+                onClick={() => void startOAuth("microsoft")}
               >
-                Sign in with Microsoft
+                {oauthPending === "microsoft"
+                  ? "Waiting for browser…"
+                  : "Sign in with Microsoft"}
               </button>
             </div>
             <footer className="form-footer">

@@ -487,6 +487,10 @@ export default function App() {
     draft: AccountDraft,
     provider: "google" | "microsoft",
   ) {
+    if (!draft.address.trim().includes("@")) {
+      setAccountError("Enter the mailbox address, then Sign in with Google or Microsoft.");
+      return;
+    }
     setAccountBusy(true);
     setAccountError(null);
     try {

@@ -1491,8 +1491,12 @@ kbd {
 .oauth-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px;
   margin: 12px 0 0;
+}
+
+.oauth-row .desk-cta {
+  margin-top: 0;
 }
 
 .reader-meta {
