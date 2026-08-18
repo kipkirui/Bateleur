@@ -35,7 +35,7 @@ pub fn from_rfc822(
     let class = with_calendar(classify_mail(&subject, &preview, &from_email), has_calendar);
     let feed = class.feed.to_string();
     let domain = from_email.split('@').nth(1).unwrap_or("mail");
-    let hero = if feed == "reading" && folder == "inbox" {
+    let hero = if folder == "archive" || (feed == "reading" && folder == "inbox") {
         Some(Hero {
             label: domain.to_string(),
             tone: "paper".into(),

@@ -199,7 +199,10 @@ pub fn waiting_count(mailbox: &Mailbox, account_id: Option<&str>) -> usize {
 
 /// Split `{account}:{folder}:{uid}` where `folder` may contain colons (`custom:Work`).
 pub fn parse_message_ref(account_id: &str, message_id: &str) -> Result<(String, u32), String> {
-    if message_id.starts_with("sent:") || message_id.starts_with("draft:") {
+    if message_id.starts_with("sent:")
+        || message_id.starts_with("draft:")
+        || message_id.starts_with("archive:")
+    {
         return Err(
             "This copy is local-only. Sync the mailbox to change flags on the server.".into(),
         );
@@ -238,5 +241,6 @@ mod tests {
     fn message_ref_rejects_local_copies() {
         assert!(parse_message_ref("acc", "sent:acc:deadbeef").is_err());
         assert!(parse_message_ref("acc", "draft:acc:deadbeef").is_err());
+        assert!(parse_message_ref("acc", "archive:acc:deadbeef").is_err());
     }
 }

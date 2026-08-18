@@ -14,6 +14,9 @@ type Props = {
   awaiting: number;
   uncertain: number;
   radar: number;
+  clippings?: number;
+  clippingsOpen?: boolean;
+  onClippings?: () => void;
   folders: MailFolder[];
   mode: ReaderMode;
   onMode: (mode: ReaderMode) => void;
@@ -30,6 +33,7 @@ type Props = {
 const FEEDS: { id: FeedId; label: string }[] = [
   { id: "action", label: "Action" },
   { id: "reading", label: "Reading" },
+  { id: "archive", label: "Back issues" },
 ];
 
 const SYSTEM_FOLDERS: { id: FeedId; label: string }[] = [
@@ -48,6 +52,9 @@ export function Rail({
   awaiting,
   uncertain,
   radar,
+  clippings = 0,
+  clippingsOpen = false,
+  onClippings,
   folders,
   mode,
   onMode,
@@ -124,6 +131,21 @@ export function Rail({
                 <span className="await-label">Radar</span>
                 <span className="rail-stat-hint">
                   Meeting invites already in this mailbox. Not a calendar.
+                </span>
+              </span>
+            </button>
+          ) : null}
+          {clippings > 0 && onClippings ? (
+            <button
+              type="button"
+              className={clippingsOpen ? "await-badge active" : "await-badge"}
+              onClick={onClippings}
+            >
+              <span className="await-count">{clippings}</span>
+              <span className="await-copy">
+                <span className="await-label">Clippings</span>
+                <span className="rail-stat-hint">
+                  Quotes you kept from letters. Not a notebook.
                 </span>
               </span>
             </button>

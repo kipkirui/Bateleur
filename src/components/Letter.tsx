@@ -22,6 +22,7 @@ type Props = {
   onMailTo: (mail: MailTo) => void;
   cidParts?: InlinePart[];
   remoteImages?: boolean;
+  onQuote?: (quote: string | null) => void;
 };
 
 export function letterHtml(message: Message): string | null {
@@ -32,7 +33,7 @@ export function letterHtml(message: Message): string | null {
   return null;
 }
 
-export function Letter({ message, onMailTo, cidParts = [], remoteImages = false }: Props) {
+export function Letter({ message, onMailTo, cidParts = [], remoteImages = false, onQuote }: Props) {
   const html = letterHtml(message);
   const src = html ? rewriteCidImages(html, cidParts) : null;
   const [mode, setMode] = useState<"html" | "text">(src ? "html" : "text");
@@ -57,6 +58,7 @@ export function Letter({ message, onMailTo, cidParts = [], remoteImages = false 
             html={src}
             remoteImages={remoteImages}
             onMailTo={onMailTo}
+            onQuote={onQuote}
           />
           <div className="letter-switch">
             <button type="button" className="text-btn" onClick={() => setMode("text")}>
@@ -69,20 +71,29 @@ export function Letter({ message, onMailTo, cidParts = [], remoteImages = false 
           This letter is HTML. Sync the mailbox to load the designed version.
         </p>
       ) : (
-        <TextLetter text={readableText(stripCssNoise(message.body))} onMailTo={onMailTo} />
+        <TextLetter text={readableText(stripCssNoise(message.body))} onMailTo={onMailTo} onQuote={onQuote} />
       )}
     </>
   );
+}
+
+function readQuote(doc: Document): string | null {
+  const raw = doc.getSelection()?.toString() ?? "";
+  const line = raw.split(/\s+/).filter(Boolean).join(" ").trim();
+  if (line.length < 3) return null;
+  return line.slice(0, 400);
 }
 
 function HtmlLetter({
   html,
   remoteImages,
   onMailTo,
+  onQuote,
 }: {
   html: string;
   remoteImages: boolean;
   onMailTo: (mail: MailTo) => void;
+  onQuote?: (quote: string | null) => void;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const srcdoc = sanitizeEmailHtml(html, remoteImages);
@@ -107,6 +118,11 @@ function HtmlLetter({
         void handleHref(href, onMailTo);
       };
       doc.addEventListener("click", onClick, true);
+      const onSelect = () => {
+        onQuote?.(readQuote(doc));
+      };
+      doc.addEventListener("mouseup", onSelect);
+      doc.addEventListener("keyup", onSelect);
       const resize = () => {
         const height = Math.max(
           doc.documentElement.scrollHeight,
@@ -121,6 +137,8 @@ function HtmlLetter({
       if (doc.body) observer.observe(doc.body);
       return () => {
         doc.removeEventListener("click", onClick, true);
+        doc.removeEventListener("mouseup", onSelect);
+        doc.removeEventListener("keyup", onSelect);
         observer.disconnect();
       };
     }
@@ -136,7 +154,7 @@ function HtmlLetter({
       iframe.removeEventListener("load", onLoad);
       cleanup?.();
     };
-  }, [srcdoc, onMailTo]);
+  }, [srcdoc, onMailTo, onQuote]);
 
   return (
     <iframe
@@ -150,7 +168,15 @@ function HtmlLetter({
   );
 }
 
-function TextLetter({ text, onMailTo }: { text: string; onMailTo: (mail: MailTo) => void }) {
+function TextLetter({
+  text,
+  onMailTo,
+  onQuote,
+}: {
+  text: string;
+  onMailTo: (mail: MailTo) => void;
+  onQuote?: (quote: string | null) => void;
+}) {
   const parts = linkify(text);
 
   async function onClick(event: MouseEvent<HTMLAnchorElement>, href: string) {
@@ -159,7 +185,11 @@ function TextLetter({ text, onMailTo }: { text: string; onMailTo: (mail: MailTo)
   }
 
   return (
-    <pre className="letter">
+    <pre
+      className="letter"
+      onMouseUp={() => onQuote?.(readQuote(document))}
+      onKeyUp={() => onQuote?.(readQuote(document))}
+    >
       {parts.map((part, index) => {
         if (part.kind === "text") return <span key={index}>{part.value}</span>;
         return (

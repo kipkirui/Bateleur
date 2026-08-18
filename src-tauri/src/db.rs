@@ -5,6 +5,7 @@ use bateleur_core::{
 };
 use base64::Engine;
 use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 pub fn open(path: &std::path::Path) -> Result<Connection, String> {
@@ -81,6 +82,13 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
             at TEXT NOT NULL,
             PRIMARY KEY (message_id, kind)
         );
+        CREATE TABLE IF NOT EXISTS clippings (
+            id TEXT PRIMARY KEY,
+            message_id TEXT NOT NULL,
+            quote TEXT NOT NULL,
+            at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS clippings_message ON clippings(message_id);
         ",
     )
     .map_err(err)?;
@@ -680,6 +688,77 @@ pub fn delete_message(conn: &Connection, id: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub fn stash_archive(conn: &Connection, message_id: &str) -> Result<(), String> {
+    let message = get_message(conn, message_id)?;
+    if message.folder == "archive" {
+        return Ok(());
+    }
+    let new_id = format!(
+        "archive:{}:{}",
+        message.account_id,
+        uuid::Uuid::new_v4().simple()
+    );
+    conn.execute("DELETE FROM mail_fts WHERE message_id = ?1", [message_id])
+        .map_err(err)?;
+    conn.execute(
+        "UPDATE messages SET id = ?1, folder = 'archive', unread = 0 WHERE id = ?2",
+        params![new_id, message_id],
+    )
+    .map_err(err)?;
+    conn.execute(
+        "UPDATE attachments SET message_id = ?1 WHERE message_id = ?2",
+        params![new_id, message_id],
+    )
+    .map_err(err)?;
+    conn.execute(
+        "UPDATE staff_notes SET message_id = ?1 WHERE message_id = ?2",
+        params![new_id, message_id],
+    )
+    .map_err(err)?;
+    conn.execute(
+        "UPDATE clippings SET message_id = ?1 WHERE message_id = ?2",
+        params![new_id, message_id],
+    )
+    .map_err(err)?;
+    let stored = get_message(conn, &new_id)?;
+    upsert_fts(conn, &stored)?;
+    Ok(())
+}
+
+pub fn prune_archive_stashes(conn: &Connection, account_id: &str) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id FROM messages
+             WHERE account_id = ?1 AND folder = 'archive' AND id LIKE ?2
+               AND rfc_id IS NOT NULL AND length(rfc_id) > 0
+               AND rfc_id IN (
+                   SELECT rfc_id FROM messages
+                   WHERE account_id = ?1 AND folder = 'archive' AND id LIKE ?3
+                     AND rfc_id IS NOT NULL AND length(rfc_id) > 0
+               )",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map(
+            params![
+                account_id,
+                format!("archive:{account_id}:%"),
+                format!("{account_id}:archive:%")
+            ],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(err)?;
+    let mut ids = Vec::new();
+    for row in rows {
+        ids.push(row.map_err(err)?);
+    }
+    drop(stmt);
+    for id in ids {
+        delete_message(conn, &id)?;
+    }
+    Ok(())
+}
+
 pub fn get_account(conn: &Connection, id: &str) -> Result<Account, String> {
     conn.query_row(
         "SELECT id, address, label, kind, imap_host, imap_port, imap_user,
@@ -743,6 +822,9 @@ pub fn apply_fetch(
     remember_pop_uidls(conn, account_id, pop_uidls)?;
     prune_stale_inbox(conn, account_id)?;
     prune_fts(conn)?;
+    if messages.iter().any(|m| m.folder == "archive") {
+        prune_archive_stashes(conn, account_id)?;
+    }
     if messages
         .iter()
         .any(|m| m.folder == "sent" && m.id.contains(":sent:"))
@@ -1425,6 +1507,109 @@ fn account_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Account> {
 
 fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
+}
+
+const CLIP_MAX: usize = 400;
+const CLIP_KEEP: i64 = 200;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Clipping {
+    pub id: String,
+    pub message_id: String,
+    pub quote: String,
+    pub at: String,
+    pub from_name: String,
+    pub from_email: String,
+    pub subject: String,
+}
+
+fn normalize_quote(raw: &str) -> String {
+    let line: String = raw.split_whitespace().collect::<Vec<_>>().join(" ");
+    line.chars().take(CLIP_MAX).collect()
+}
+
+pub fn list_clippings(conn: &Connection) -> Result<Vec<Clipping>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT c.id, c.message_id, c.quote, c.at,
+                    COALESCE(m.from_name, ''), COALESCE(m.from_email, ''), COALESCE(m.subject, '')
+             FROM clippings c
+             LEFT JOIN messages m ON m.id = c.message_id
+             ORDER BY c.at DESC
+             LIMIT 200",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(Clipping {
+                id: row.get(0)?,
+                message_id: row.get(1)?,
+                quote: row.get(2)?,
+                at: row.get(3)?,
+                from_name: row.get(4)?,
+                from_email: row.get(5)?,
+                subject: row.get(6)?,
+            })
+        })
+        .map_err(err)?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row.map_err(err)?);
+    }
+    Ok(out)
+}
+
+pub fn save_clipping(conn: &Connection, message_id: &str, quote: &str) -> Result<Vec<Clipping>, String> {
+    let quote = normalize_quote(quote);
+    if quote.chars().count() < 3 {
+        return Err("Select a bit more text to keep.".into());
+    }
+    let known: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM messages WHERE id = ?1",
+            [message_id],
+            |row| row.get(0),
+        )
+        .map_err(err)?;
+    if known == 0 {
+        return Err("That letter is not in the cache.".into());
+    }
+    let exists: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM clippings WHERE message_id = ?1 AND quote = ?2",
+            params![message_id, quote],
+            |row| row.get(0),
+        )
+        .map_err(err)?;
+    if exists == 0 {
+        let id = uuid::Uuid::new_v4().to_string();
+        let at = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO clippings (id, message_id, quote, at) VALUES (?1, ?2, ?3, ?4)",
+            params![id, message_id, quote, at],
+        )
+        .map_err(err)?;
+        let extra: i64 = conn
+            .query_row("SELECT COUNT(*) FROM clippings", [], |row| row.get(0))
+            .map_err(err)?;
+        if extra > CLIP_KEEP {
+            conn.execute(
+                "DELETE FROM clippings WHERE id IN (
+                    SELECT id FROM clippings ORDER BY at ASC LIMIT ?1
+                 )",
+                [extra - CLIP_KEEP],
+            )
+            .map_err(err)?;
+        }
+    }
+    list_clippings(conn)
+}
+
+pub fn delete_clipping(conn: &Connection, id: &str) -> Result<Vec<Clipping>, String> {
+    conn.execute("DELETE FROM clippings WHERE id = ?1", [id])
+        .map_err(err)?;
+    list_clippings(conn)
 }
 
 #[cfg(test)]

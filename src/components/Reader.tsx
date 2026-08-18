@@ -6,7 +6,7 @@ import { threadLetters } from "../lib/stories";
 import { Avatar } from "./Avatar";
 import { Letter, letterHtml } from "./Letter";
 import type { MailTo } from "../lib/links";
-import type { Account, Attachment, InlinePart, Message, StaffStatus, StaffSummary, StoryOverride } from "../types";
+import type { Account, Attachment, Clipping, InlinePart, Message, StaffStatus, StaffSummary, StoryOverride } from "../types";
 
 type Props = {
   message: Message;
@@ -31,6 +31,9 @@ type Props = {
   onDraft: (body: string) => void;
   onTriaged?: () => void;
   storyOverrides?: Record<string, StoryOverride>;
+  clippings?: Clipping[];
+  onKeep?: (quote: string) => void;
+  onDropClip?: (id: string) => void;
 };
 
 export function Reader({
@@ -56,6 +59,9 @@ export function Reader({
   onDraft,
   onTriaged,
   storyOverrides = {},
+  clippings = [],
+  onKeep,
+  onDropClip,
 }: Props) {
   const html = letterHtml(message);
   const files = (message.attachments ?? []).filter((a) => !a.inline);
@@ -68,6 +74,7 @@ export function Reader({
   const [savedDraft, setSavedDraft] = useState<string | null>(null);
   const [staffBusy, setStaffBusy] = useState<"summarize" | "draft" | "triage" | "rsvp" | null>(null);
   const [staffError, setStaffError] = useState<string | null>(null);
+  const [pendingQuote, setPendingQuote] = useState<string | null>(null);
   const quote = lede(message);
   const thread = threadLetters(mailbox, message, storyOverrides);
   const related = mailbox
@@ -105,6 +112,7 @@ export function Reader({
     setSummary(null);
     setSavedDraft(null);
     setStaffError(null);
+    setPendingQuote(null);
     let cancelled = false;
     void staffLetter(message.id)
       .then((notes) => {
@@ -218,6 +226,21 @@ export function Reader({
             {account?.label ?? "Mailbox"} · Esc
           </span>
         </header>
+        {pendingQuote && onKeep ? (
+          <div className="clip-bar">
+            <blockquote className="clip-quote">{pendingQuote}</blockquote>
+            <button
+              type="button"
+              className="text-btn"
+              onClick={() => {
+                onKeep(pendingQuote);
+                setPendingQuote(null);
+              }}
+            >
+              Keep
+            </button>
+          </div>
+        ) : null}
         <div className="article-byline">
           <button type="button" className="sender-btn" onClick={onSender}>
             <Avatar name={message.fromName} email={message.fromEmail} size="md" />
@@ -385,7 +408,25 @@ export function Reader({
           onMailTo={onMailTo}
           cidParts={cidParts}
           remoteImages={allowRemote}
+          onQuote={setPendingQuote}
         />
+        {clippings.filter((clip) => clip.messageId === message.id).length > 0 ? (
+          <div className="clip-kept">
+            <div className="rail-label">Kept from this letter</div>
+            {clippings
+              .filter((clip) => clip.messageId === message.id)
+              .map((clip) => (
+                <div key={clip.id} className="clip-item">
+                  <blockquote className="clip-quote">{clip.quote}</blockquote>
+                  {onDropClip ? (
+                    <button type="button" className="text-btn" onClick={() => onDropClip(clip.id)}>
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+          </div>
+        ) : null}
         {showRemoteBar ? (
           <div className="remote-bar">
             <span>Remote images are blocked.</span>
@@ -447,9 +488,11 @@ export function Reader({
             <button type="button" className="text-btn" onClick={onFlag}>
               {message.flagged ? "Unflag" : "Flag"}
             </button>
-            <button type="button" className="text-btn" onClick={onArchive}>
-              Archive
-            </button>
+            {message.folder !== "archive" ? (
+              <button type="button" className="text-btn" onClick={onArchive}>
+                Archive
+              </button>
+            ) : null}
             {onReplyAll ? (
               <button type="button" className="text-btn" onClick={onReplyAll}>
                 Reply all

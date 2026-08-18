@@ -8,12 +8,10 @@ Much of the original list below has shipped. Keep this note as design direction;
 
 ## Now shipped
 
-Per-sender Reading lock (move twice), **Why here?**, magazine cover / briefing / Reading digest, story stacks (pin / rename / merge / not a story), session receipts, Awaiting reply, Uncertain tray, empty Action copy, Compose Focus, collapsed quote-reply, local snippets, Ctrl+K as search + commands, undo (`z`), multi-select (`x`), FTS5 search, unified vs per-account, Reply all / Forward, Cc / Bcc, Save draft, Morning Brief (eight unread Action letters; a line leaves once you read it), paper stocks (cream, newsprint, sepia, night).
+Per-sender Reading lock (move twice), **Why here?**, magazine cover / briefing / Reading digest, story stacks (pin / rename / merge / not a story), session receipts, Awaiting reply, Uncertain tray, empty Action copy, Compose Focus, collapsed quote-reply, local snippets, Ctrl+K as search + commands, undo (`z`), multi-select (`x`), FTS5 search, unified vs per-account, Reply all / Forward, Cc / Bcc, Save draft, Morning Brief (eight unread Action letters; a line leaves once you read it), paper stocks (cream, newsprint, sepia, night), Back issues shelf, clippings from selected text.
 
 ## Still open
 
-- Archive as a back-issues shelf (not a folder tree)
-- Highlights / clippings from selected text
 - Signed installers and auto-updater
 - Calendar protocol (CalDAV / Google) — Radar stays invites already in mail
 - Mobile shell (background IMAP and push)
@@ -196,12 +194,13 @@ chronological, with the same headline treatment as the live feed — not
 a folder tree. Revisiting old mail should feel like browsing back
 issues, not digging through Sent/Archive folders.
 
-## Highlights (future)
+## Highlights
 
-Selecting text in a message and saving it to a lightweight clippings
-list (confirmation numbers, addresses, dates) gives mail a "keep this"
-affordance the way blogs and read-later apps do, without building a
-full notes product on top.
+Selecting text in a letter and **Keep** saves it to a lightweight clippings
+list (confirmation numbers, addresses, dates). That is a "keep this"
+affordance, not a notes product — 200 clips, 400 characters, local SQLite.
+The letter iframe stays `sandbox="allow-same-origin"` with no scripts;
+parent JS reads the selection from `contentDocument`.
 
 ## Non-goals
 

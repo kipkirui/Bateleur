@@ -16,6 +16,7 @@ import type {
   StaffSummary,
   StaffTriage,
   StoryOverride,
+  Clipping,
 } from "./types";
 
 function fromParts(
@@ -212,6 +213,25 @@ export async function lockSenderReading(email: string): Promise<Mailbox> {
 export async function searchMail(query: string, accountId: string | null): Promise<string[]> {
   if (!isTauri()) return [];
   return invoke<string[]>("search_mail", { query, accountId });
+}
+
+export async function listClippings(): Promise<Clipping[]> {
+  if (!isTauri()) return [];
+  return invoke<Clipping[]>("list_clippings");
+}
+
+export async function saveClipping(messageId: string, quote: string): Promise<Clipping[]> {
+  if (!isTauri()) {
+    throw new Error("Clippings need the desktop app.");
+  }
+  return invoke<Clipping[]>("save_clipping", { messageId, quote });
+}
+
+export async function deleteClipping(id: string): Promise<Clipping[]> {
+  if (!isTauri()) {
+    throw new Error("Clippings need the desktop app.");
+  }
+  return invoke<Clipping[]>("delete_clipping", { id });
 }
 
 const EMPTY_STAFF: StaffStatus = {

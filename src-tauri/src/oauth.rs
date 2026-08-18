@@ -133,10 +133,7 @@ pub fn sign_in(
 
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-    let redirect = match provider.as_str() {
-        "microsoft" => format!("http://localhost:{port}/"),
-        _ => format!("http://127.0.0.1:{port}/"),
-    };
+    let redirect = loopback_redirect(&provider, port);
     let verifier = random_token();
     let challenge = pkce_challenge(&verifier);
     let state = random_token();
@@ -191,9 +188,18 @@ fn missing_client_help(provider: &str) -> String {
                 .into()
         }
         _ => {
-            "Sign in with Microsoft needs a public-client application ID. In Azure: App registrations → New → public client, with redirect http://localhost. Paste it under OAuth client IDs in Settings, or set BATELEUR_MICROSOFT_OAUTH_CLIENT_ID."
+            "Sign in with Microsoft needs a public-client application ID. In Azure: App registrations → New registration. Authentication → Add a platform → Mobile and desktop applications. Add the redirect URI http://localhost (not Web, not SPA, not nativeclient-only). Allow public client flows: Yes. Paste the Application (client) ID under OAuth client IDs in Settings, or set BATELEUR_MICROSOFT_OAUTH_CLIENT_ID."
                 .into()
         }
+    }
+}
+
+fn loopback_redirect(provider: &str, port: u16) -> String {
+    match provider {
+        // Entra ignores the port on localhost. A trailing slash is a different
+        // path than the URI Azure stores for "http://localhost".
+        "microsoft" => format!("http://localhost:{port}"),
+        _ => format!("http://127.0.0.1:{port}/"),
     }
 }
 
@@ -440,5 +446,11 @@ mod tests {
         let map = parse_query("code=abc%2Fde&state=s1");
         assert_eq!(map.get("code").unwrap(), "abc/de");
         assert_eq!(map.get("state").unwrap(), "s1");
+    }
+
+    #[test]
+    fn microsoft_loopback_matches_azure_localhost() {
+        assert_eq!(loopback_redirect("microsoft", 54321), "http://localhost:54321");
+        assert_eq!(loopback_redirect("google", 9), "http://127.0.0.1:9/");
     }
 }

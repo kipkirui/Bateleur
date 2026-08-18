@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadComposeAttachments, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToAction, moveToReading, removeAccount, resetSender, saveMailDraft, saveStoryOverrides, searchMail, sendMail, setFlag, setMailAlerts, staffBrief as loadStaffBrief, staffStatus as loadStaffStatus, storyOverrides as loadStoryOverrides, summarizeAccount as writeStaffBrief, syncAccount } from "./api";
+import { addAccount, addAccountOAuth, archiveMessage, deleteClipping, hydrateMailbox, isTauri, listClippings, loadComposeAttachments, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToAction, moveToReading, removeAccount, resetSender, saveClipping, saveMailDraft, saveStoryOverrides, searchMail, sendMail, setFlag, setMailAlerts, staffBrief as loadStaffBrief, staffStatus as loadStaffStatus, storyOverrides as loadStoryOverrides, summarizeAccount as writeStaffBrief, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -10,9 +10,10 @@ import { Rail } from "./components/Rail";
 import { Reader } from "./components/Reader";
 import { Settings } from "./components/Settings";
 import { SenderPage } from "./components/SenderPage";
+import { Clippings } from "./components/Clippings";
 import { Palette, type PaletteCommand } from "./components/Palette";
 import { StaffModal } from "./components/StaffModal";
-import type { AccountDraft, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, StaffBrief, StaffStatus, StoryOverride, SyncStatus } from "./types";
+import type { AccountDraft, Clipping, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, StaffBrief, StaffStatus, StoryOverride, SyncStatus } from "./types";
 import type { MailTo } from "./lib/links";
 import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
 import { loadPaper, PAPER_STOCKS, savePaper, type PaperStock } from "./lib/paper";
@@ -30,7 +31,7 @@ import { groupStories, patchOverride, railStories, type StoryDesk } from "./lib/
 import { UNDO_MS, archiveLabel, flagLabel } from "./lib/undo";
 import "./styles.css";
 
-type Overlay = "none" | "reader" | "compose" | "settings" | "staff" | "sender" | "palette";
+type Overlay = "none" | "reader" | "compose" | "settings" | "staff" | "sender" | "palette" | "clippings";
 
 function waitingFor(messages: Message[], accountId: string | null): number {
   return messages.filter((m) => {
@@ -93,6 +94,7 @@ export default function App() {
   const [waitingDismissed, setWaitingDismissed] = useState(loadWaitingDismissed);
   const [storyOverrides, setStoryOverrides] = useState<Record<string, StoryOverride>>({});
   const [storyFilter, setStoryFilter] = useState<string | null>(null);
+  const [clippings, setClippings] = useState<Clipping[]>([]);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [accountBusy, setAccountBusy] = useState(false);
   const [settingsNonce, setSettingsNonce] = useState(0);
@@ -136,6 +138,7 @@ export default function App() {
     void loadMailAlerts().then(setMailAlertsOn).catch(() => {});
     void loadStaffStatus().then(setStaff).catch(() => {});
     void loadStoryOverrides().then(setStoryOverrides).catch(() => {});
+    void listClippings().then(setClippings).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -253,7 +256,7 @@ export default function App() {
     return messages.filter((m) => {
       if (accountId && m.accountId !== accountId) return false;
       if (hiddenIds.has(m.id)) return false;
-      if (feed === "sent" || feed === "drafts" || feed === "junk") {
+      if (feed === "sent" || feed === "drafts" || feed === "junk" || feed === "archive") {
         return m.folder === feed;
       }
       if (feed.startsWith("custom:")) return m.folder === feed;
@@ -671,9 +674,11 @@ export default function App() {
 
   function queueArchive(list: Message[]) {
     const extra = list.filter(
-      (message) => !archiveQueue.current.some((queued) => queued.id === message.id),
+      (message) =>
+        message.folder !== "archive" &&
+        !archiveQueue.current.some((queued) => queued.id === message.id),
     );
-    if (extra.length === 0 && archiveQueue.current.length === 0 && list.length === 0) return;
+    if (extra.length === 0) return;
     if (undoKind.current === "send") {
       void commitSend().then(() => queueArchive(list));
       return;
@@ -925,7 +930,8 @@ export default function App() {
           overlay === "compose" ||
           overlay === "settings" ||
           overlay === "staff" ||
-          overlay === "sender"
+          overlay === "sender" ||
+          overlay === "clippings"
         ) {
           return;
         }
@@ -959,7 +965,7 @@ export default function App() {
         return;
       }
       if (typing) return;
-      if (overlay === "compose" || overlay === "settings" || overlay === "staff" || overlay === "sender" || overlay === "palette") {
+      if (overlay === "compose" || overlay === "settings" || overlay === "staff" || overlay === "sender" || overlay === "palette" || overlay === "clippings") {
         return;
       }
       if (e.key === "z" && canUndo) {
@@ -1084,6 +1090,8 @@ export default function App() {
           ? "No drafts yet. Save from Compose, or Sync if they live on the server."
           : feed === "junk"
             ? "Junk is empty."
+            : feed === "archive"
+              ? "No back issues yet. Archive a letter and it lands on this shelf."
             : feed.startsWith("custom:")
               ? "Nothing in this folder."
               : feed === "awaiting"
@@ -1103,6 +1111,13 @@ export default function App() {
       run: () => {
         setFeed("awaiting");
         setOverlay("none");
+      },
+    },
+    {
+      id: "clippings",
+      label: clippings.length > 0 ? `Clippings (${clippings.length})` : "Clippings",
+      run: () => {
+        setOverlay("clippings");
       },
     },
     {
@@ -1207,6 +1222,14 @@ export default function App() {
       label: "Go to Reading",
       run: () => {
         setFeed("reading");
+        setOverlay("none");
+      },
+    },
+    {
+      id: "archive",
+      label: "Back issues",
+      run: () => {
+        setFeed("archive");
         setOverlay("none");
       },
     },
@@ -1341,6 +1364,9 @@ export default function App() {
         awaiting={awaiting.length}
         uncertain={inbox.filter((m) => m.feed === "uncertain").length}
         radar={inbox.filter((m) => m.invite).length}
+        clippings={clippings.length}
+        clippingsOpen={overlay === "clippings"}
+        onClippings={() => setOverlay(overlay === "clippings" ? "none" : "clippings")}
         sync={syncCaption(syncByAccount, accountId)}
         folders={mailbox?.folders ?? []}
         mode={mode}
@@ -1475,6 +1501,20 @@ export default function App() {
             void refresh(accountId);
           }}
           storyOverrides={storyOverrides}
+          clippings={clippings}
+          onKeep={(quote) => {
+            void saveClipping(selected.id, quote)
+              .then((next) => {
+                setClippings(next);
+                setToast("Kept");
+              })
+              .catch((err) => setToast(err instanceof Error ? err.message : String(err)));
+          }}
+          onDropClip={(id) => {
+            void deleteClipping(id)
+              .then(setClippings)
+              .catch((err) => setToast(err instanceof Error ? err.message : String(err)));
+          }}
         />
       ) : null}
 
@@ -1551,6 +1591,26 @@ export default function App() {
           onOpen={(id) => {
             setSelectedId(id);
             setOverlay("reader");
+          }}
+        />
+      ) : null}
+
+      {overlay === "clippings" ? (
+        <Clippings
+          clippings={clippings}
+          onClose={() => setOverlay("none")}
+          onOpen={(id) => {
+            if (!messages.some((message) => message.id === id)) {
+              setToast("That letter is no longer in the cache.");
+              return;
+            }
+            setSelectedId(id);
+            setOverlay("reader");
+          }}
+          onRemove={(id) => {
+            void deleteClipping(id)
+              .then(setClippings)
+              .catch((err) => setToast(err instanceof Error ? err.message : String(err)));
           }}
         />
       ) : null}

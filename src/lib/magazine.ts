@@ -69,6 +69,29 @@ export function formatWhen(iso: string): string {
   });
 }
 
+export function issueLabel(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "Undated";
+  return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+export function groupIssues(messages: Message[]): { id: string; title: string; messages: Message[] }[] {
+  const buckets = new Map<string, Message[]>();
+  for (const message of messages) {
+    const key = message.receivedAt.slice(0, 7) || "undated";
+    const list = buckets.get(key);
+    if (list) list.push(message);
+    else buckets.set(key, [message]);
+  }
+  return [...buckets.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([id, list]) => ({
+      id,
+      title: issueLabel(list[0]?.receivedAt ?? id),
+      messages: list,
+    }));
+}
+
 function splitSentences(text: string): string[] {
   return text
     .split(/\n+|(?<=[.!?])\s+/)

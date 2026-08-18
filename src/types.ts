@@ -39,6 +39,16 @@ export type Message = {
   invite?: MeetingInvite | null;
 };
 
+export type Clipping = {
+  id: string;
+  messageId: string;
+  quote: string;
+  at: string;
+  fromName: string;
+  fromEmail: string;
+  subject: string;
+};
+
 export type MeetingInvite = {
   method: string;
   summary: string;
@@ -144,6 +154,7 @@ export type FeedId =
   | "uncertain"
   | "awaiting"
   | "radar"
+  | "archive"
   | "sent"
   | "drafts"
   | "junk"

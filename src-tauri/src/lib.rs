@@ -562,7 +562,7 @@ async fn archive_message(
     if account.kind == "pop" {
         let mailbox = {
             let conn = state.db.lock().map_err(|e| e.to_string())?;
-            db::delete_message(&conn, &message_id)?;
+            db::stash_archive(&conn, &message_id)?;
             db::load_mailbox(&conn)?
         };
         return Ok(mailbox);
@@ -585,7 +585,7 @@ async fn archive_message(
 
     let mailbox = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
-        db::delete_message(&conn, &message_id)?;
+        db::stash_archive(&conn, &message_id)?;
         db::load_mailbox(&conn)?
     };
     Ok(mailbox)
@@ -712,6 +712,28 @@ fn search_mail(
 ) -> Result<Vec<String>, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     db::search_ids(&conn, &query, account_id.as_deref())
+}
+
+#[tauri::command]
+fn list_clippings(state: State<AppState>) -> Result<Vec<db::Clipping>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::list_clippings(&conn)
+}
+
+#[tauri::command]
+fn save_clipping(
+    state: State<AppState>,
+    message_id: String,
+    quote: String,
+) -> Result<Vec<db::Clipping>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::save_clipping(&conn, &message_id, &quote)
+}
+
+#[tauri::command]
+fn delete_clipping(state: State<AppState>, id: String) -> Result<Vec<db::Clipping>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::delete_clipping(&conn, &id)
 }
 
 #[tauri::command]
@@ -923,6 +945,9 @@ pub fn run() {
             reset_sender,
             lock_sender_reading,
             search_mail,
+            list_clippings,
+            save_clipping,
+            delete_clipping,
             staff_status,
             save_staff,
             clear_staff,

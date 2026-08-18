@@ -334,6 +334,13 @@ export function Settings({
             <code>BATELEUR_GOOGLE_OAUTH_CLIENT_ID</code> and{" "}
             <code>BATELEUR_MICROSOFT_OAUTH_CLIENT_ID</code>.
           </p>
+          <p className="muted">
+            Microsoft: Azure → App registrations → New registration. Authentication
+            → Add a platform → <strong>Mobile and desktop applications</strong>.
+            Redirect URI <code>http://localhost</code> — not Web, not SPA, and not
+            only the suggested nativeclient URL. Allow public client flows: Yes.
+            Then paste the Application (client) ID below.
+          </p>
           <label>
             Google client ID
             <input

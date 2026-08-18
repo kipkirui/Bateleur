@@ -1,6 +1,6 @@
 import { useState, type MouseEvent } from "react";
 import { readableText } from "../lib/emailHtml";
-import { formatWhen, lede } from "../lib/magazine";
+import { formatWhen, lede, groupIssues } from "../lib/magazine";
 import { groupStories, type Story, type StoryDesk } from "../lib/stories";
 import { StoryTools } from "./StoryTools";
 import type { WaitingItem } from "../lib/waiting";
@@ -300,6 +300,17 @@ export function Feed({
             onSender={onSender}
             storyDesk={tools}
           />
+        ) : feed === "archive" ? (
+          <BackIssues
+            messages={messages}
+            selectedId={selectedId}
+            checkedIds={checkedIds}
+            selecting={selecting}
+            onSelect={onSelect}
+            onToggleCheck={onToggleCheck}
+            onOpen={onOpen}
+            onSender={onSender}
+          />
         ) : (
           <div className="magazine">
             <div className="block">
@@ -436,6 +447,71 @@ function ActionMagazine({
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function BackIssues({
+  messages,
+  selectedId,
+  checkedIds,
+  selecting,
+  onSelect,
+  onToggleCheck,
+  onOpen,
+  onSender,
+}: {
+  messages: Message[];
+  selectedId: string | null;
+  checkedIds: Set<string>;
+  selecting: boolean;
+  onSelect: (id: string) => void;
+  onToggleCheck: (id: string) => void;
+  onOpen: (id: string) => void;
+  onSender: (message: Message) => void;
+}) {
+  const issues = groupIssues(messages);
+  return (
+    <div className="magazine">
+      <div className="block">
+        <h2>Back issues</h2>
+        <p className="muted await-lede">
+          Letters you archived, bound by month. Not a folder tree.
+        </p>
+        {issues.map((issue) => (
+          <div key={issue.id} className="issue">
+            <h3 className="issue-month">{issue.title}</h3>
+            {issue.messages.map((message) => (
+              <article
+                key={message.id}
+                className={`issue-row${selectedId === message.id ? " selected" : ""}${checkedIds.has(message.id) ? " checked" : ""}`}
+                onClick={() => onSelect(message.id)}
+                onDoubleClick={() => onOpen(message.id)}
+              >
+                {selecting || checkedIds.has(message.id) ? (
+                  <Check on={checkedIds.has(message.id)} onToggle={() => onToggleCheck(message.id)} />
+                ) : (
+                  <span className={message.unread ? "dot unread" : "dot"} />
+                )}
+                <div className="issue-copy">
+                  <h4 className="issue-hed">{readableText(message.subject)}</h4>
+                  <button
+                    type="button"
+                    className="sender-btn"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSender(message);
+                    }}
+                  >
+                    {readableText(message.fromName) || message.fromEmail}
+                  </button>
+                </div>
+                <span className="issue-when">{formatWhen(message.receivedAt)}</span>
+              </article>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -719,6 +795,7 @@ function feedHeading(feed: FeedId): string {
   if (feed === "uncertain") return "Uncertain";
   if (feed === "awaiting") return "Awaiting reply";
   if (feed === "radar") return "Radar";
+  if (feed === "archive") return "Back issues";
   if (feed === "sent") return "Sent";
   if (feed === "drafts") return "Drafts";
   if (feed === "junk") return "Junk";

@@ -8,6 +8,24 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.26.1] - 2026-08-18
+
+### Fixed
+
+- Sign in with Microsoft sends `http://localhost:{port}` (no trailing slash) so it matches an Azure **Mobile and desktop** redirect of `http://localhost`. Settings copy names that platform, URI, and public-client switch
+
+## [0.26.0] - 2026-08-18
+
+### Added
+
+- **Clippings:** select text in a letter and Keep it. Quotes live in a local list (rail badge, Ctrl+K, or under the letter). Not a notes app — 200 clips max, 400 characters each. The letter iframe still has no scripts
+
+## [0.25.0] - 2026-08-18
+
+### Added
+
+- **Back issues** is archived mail as a monthly shelf (serif headlines, by month), not a folder tree. Archive keeps a local copy. IMAP also fetches the Archive folder when it is not Gmail All Mail. `e` on a back-issue letter does nothing
+
 ## [0.24.0] - 2026-08-18
 
 ### Added

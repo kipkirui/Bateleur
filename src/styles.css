@@ -677,7 +677,9 @@ kbd {
 .teaser.selected,
 .teaser.checked,
 .brief-row.selected,
-.brief-row.checked {
+.brief-row.checked,
+.issue-row.selected,
+.issue-row.checked {
   background: var(--select);
 }
 
@@ -811,6 +813,53 @@ kbd {
 
 .thread-toc .text-btn {
   font-size: 13px;
+}
+
+.issue {
+  margin: 0 0 28px;
+}
+
+.issue-month {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin: 0 0 8px;
+}
+
+.issue-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  width: 100%;
+  padding: 14px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.issue-copy {
+  min-width: 0;
+}
+
+.issue-hed {
+  font-family: var(--font-voice);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0 0 6px;
+}
+
+.issue-when {
+  color: var(--ink-soft);
+  font-size: 12px;
+  padding-top: 4px;
+  white-space: nowrap;
 }
 
 .brief-row {
@@ -1085,6 +1134,54 @@ kbd {
   font-size: 18px;
   line-height: 1.4;
   color: var(--ink);
+}
+
+.clip-bar,
+.clip-kept,
+.clip-item {
+  margin: 0 0 16px;
+}
+
+.clip-bar,
+.clip-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+}
+
+.clip-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 10px 0;
+  background: var(--paper);
+}
+
+.clip-quote {
+  margin: 0;
+  padding: 0 0 0 12px;
+  border-left: 2px solid var(--amber);
+  font-family: var(--font-voice);
+  font-size: 16px;
+  line-height: 1.4;
+  flex: 1 1 12rem;
+}
+
+.clip-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.clip-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
 }
 
 .radar-card {

@@ -51,6 +51,12 @@ pub fn fetch_account(account: &Account, password: &str) -> Result<FetchResult, S
         let limit = match folder.canonical.as_str() {
             "inbox" => 40,
             "sent" | "drafts" | "junk" => 30,
+            "archive" => {
+                if is_all_mail(&folder.imap_name) {
+                    continue;
+                }
+                40
+            }
             "custom" => {
                 if custom_fetched >= 8 {
                     continue;
@@ -58,7 +64,6 @@ pub fn fetch_account(account: &Account, password: &str) -> Result<FetchResult, S
                 custom_fetched += 1;
                 15
             }
-            "archive" => continue,
             _ => continue,
         };
         match fetch_named(&mut session, account, folder, limit) {
@@ -393,6 +398,10 @@ fn message_folder(canonical: &str, imap_name: &str) -> String {
     } else {
         canonical.to_string()
     }
+}
+
+fn is_all_mail(imap_name: &str) -> bool {
+    archive_rank(imap_name) == 1
 }
 
 fn pick_archive(mut folders: Vec<MailFolder>) -> Option<MailFolder> {
