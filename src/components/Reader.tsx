@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { loadInlineParts, saveAttachment } from "../api";
 import { hasRemoteImages, readableText, rewriteCidImages } from "../lib/emailHtml";
 import { formatWhen, lede, readingTime, sendFrequency } from "../lib/magazine";
+import { threadLetters } from "../lib/stories";
 import { Avatar } from "./Avatar";
 import { Letter, letterHtml } from "./Letter";
 import type { MailTo } from "../lib/links";
@@ -45,11 +46,13 @@ export function Reader({
   const [savingId, setSavingId] = useState<string | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
   const quote = lede(message);
+  const thread = threadLetters(mailbox, message);
   const related = mailbox
     .filter(
       (m) =>
         m.id !== message.id &&
-        m.fromEmail.toLowerCase() === message.fromEmail.toLowerCase(),
+        m.fromEmail.toLowerCase() === message.fromEmail.toLowerCase() &&
+        !thread.some((item) => item.id === m.id),
     )
     .slice(0, 8);
 
@@ -127,6 +130,23 @@ export function Reader({
         <h1 className="article-hed">{readableText(message.subject)}</h1>
         <p className="read-time">{readingTime(message)}</p>
         {quote ? <blockquote className="lede-quote">{quote}</blockquote> : null}
+        {thread.length >= 3 ? (
+          <ol className="thread-toc">
+            {thread.map((item, index) => (
+              <li key={item.id}>
+                {item.id === message.id ? (
+                  <span>
+                    {index + 1}. {readableText(item.fromName)} · {formatWhen(item.receivedAt)}
+                  </span>
+                ) : (
+                  <button type="button" className="text-btn" onClick={() => onOpen(item.id)}>
+                    {index + 1}. {readableText(item.fromName)} · {formatWhen(item.receivedAt)}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ol>
+        ) : null}
         <Letter
           message={message}
           onMailTo={onMailTo}

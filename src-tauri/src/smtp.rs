@@ -95,6 +95,9 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
         attachments: parts.iter().map(|p| p.meta.clone()).collect(),
         category: None,
         why: None,
+        to_email: to_line.to_ascii_lowercase(),
+        rfc_id: None,
+        in_reply_to: None,
     };
     Ok((message, rfc822, parts))
 }

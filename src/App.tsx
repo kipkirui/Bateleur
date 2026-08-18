@@ -15,6 +15,15 @@ import { StaffModal } from "./components/StaffModal";
 import type { AccountDraft, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, SyncStatus } from "./types";
 import type { MailTo } from "./lib/links";
 import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
+import {
+  bumpReceipt,
+  formatReceipt,
+  loadReceipt,
+  loadReceiptShownToday,
+  saveReceiptShownToday,
+  type Receipt,
+} from "./lib/receipt";
+import { loadWaitingDismissed, saveWaitingDismissed, waitingItems } from "./lib/waiting";
 import { UNDO_MS, archiveLabel, flagLabel } from "./lib/undo";
 import "./styles.css";
 
@@ -54,6 +63,8 @@ export default function App() {
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteSearching, setPaletteSearching] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
+  const [receipt, setReceipt] = useState<Receipt>(loadReceipt);
+  const [waitingDismissed, setWaitingDismissed] = useState(loadWaitingDismissed);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [accountBusy, setAccountBusy] = useState(false);
   const [settingsNonce, setSettingsNonce] = useState(0);
@@ -67,6 +78,12 @@ export default function App() {
   const pendingSend = useRef<SendDraft | null>(null);
   const flagUndo = useRef<FlagChange[] | null>(null);
   const undoKind = useRef<"archive" | "flag" | "send" | null>(null);
+  const canUndoRef = useRef(canUndo);
+  canUndoRef.current = canUndo;
+
+  function note(field: "archived" | "flagged" | "unread" | "sent" | "reading", delta = 1) {
+    setReceipt(bumpReceipt(field, delta));
+  }
 
   const refresh = useCallback((accountFilter: string | null) => {
     return loadMailbox(accountFilter).then(setMailbox);
@@ -116,6 +133,14 @@ export default function App() {
 
   const messages = mailbox?.messages ?? [];
   const accounts = mailbox?.accounts ?? [];
+  const receiptLine = formatReceipt(receipt);
+  const deskWaiting = useMemo(() => {
+    const own = new Set(accounts.map((account) => account.address.toLowerCase()));
+    const scoped = accountId
+      ? messages.filter((message) => message.accountId === accountId)
+      : messages;
+    return waitingItems(scoped, waitingDismissed, own);
+  }, [messages, accounts, accountId, waitingDismissed]);
 
   const visible = useMemo(() => {
     return messages.filter((m) => {
@@ -314,6 +339,7 @@ export default function App() {
       setFeed("sent");
       setAccountId(draft.accountId);
       setToast("Sent");
+      note("sent");
     } catch (err) {
       restoreCompose(draft);
       setSendError(err instanceof Error ? err.message : String(err));
@@ -338,6 +364,7 @@ export default function App() {
         next = await archiveMessage(message.accountId, message.id);
       }
       if (next) setMailbox(next);
+      note("archived", batch.length);
     } catch (err) {
       setHiddenIds((prev) => {
         const copy = new Set(prev);
@@ -416,6 +443,8 @@ export default function App() {
       setCanUndo(true);
       const flagged = items[0]?.patch.flagged;
       const seen = items[0]?.patch.seen;
+      if (flagged === true) note("flagged", items.length);
+      if (seen === false) note("unread", items.length);
       setToast(
         flagged !== undefined
           ? flagLabel(items.length, flagged)
@@ -539,6 +568,8 @@ export default function App() {
             next = await setFlag(change);
           }
           if (next) setMailbox(next);
+          const flaggedOn = reverse.some((change) => change.flagged === false);
+          if (flaggedOn) note("flagged", -reverse.length);
           setToast("Restored");
         } catch (err) {
           setToast(err instanceof Error ? err.message : String(err));
@@ -552,6 +583,7 @@ export default function App() {
       const next = await moveToReading(message.id);
       setMailbox(next);
       setToast("Moved to Reading");
+      note("reading");
     } catch (err) {
       setToast(err instanceof Error ? err.message : String(err));
     }
@@ -560,6 +592,26 @@ export default function App() {
   function openSender(message: Message) {
     setSenderEmail(message.fromEmail);
     setOverlay("sender");
+  }
+
+  function openWaiting(id: string) {
+    const message = messages.find((item) => item.id === id);
+    if (!message) return;
+    setSelectedId(id);
+    if (message.folder === "sent") setFeed("sent");
+    else if (message.folder === "inbox" && message.feed === "reading") setFeed("reading");
+    else if (message.folder === "inbox") setFeed("action");
+    else if (message.folder === "drafts" || message.folder === "junk") setFeed(message.folder);
+    setOverlay("reader");
+  }
+
+  function dismissWaiting(id: string) {
+    setWaitingDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      saveWaitingDismissed(next);
+      return next;
+    });
   }
 
   const move = useCallback(
@@ -662,9 +714,35 @@ export default function App() {
 
   useEffect(() => {
     if (!toast || canUndo) return;
-    const id = window.setTimeout(() => setToast(null), 2200);
+    const ms = toast.startsWith("You ") && toast.endsWith(" today.") ? 4500 : 2200;
+    const id = window.setTimeout(() => setToast(null), ms);
     return () => window.clearTimeout(id);
   }, [toast, canUndo]);
+
+  useEffect(() => {
+    let timer = 0;
+    function arm() {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        if (canUndoRef.current) {
+          arm();
+          return;
+        }
+        const line = formatReceipt();
+        if (!line || loadReceiptShownToday()) return;
+        saveReceiptShownToday();
+        setToast(line);
+      }, 120_000);
+    }
+    arm();
+    window.addEventListener("pointerdown", arm);
+    window.addEventListener("keydown", arm);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("pointerdown", arm);
+      window.removeEventListener("keydown", arm);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -709,6 +787,14 @@ export default function App() {
                 : "Nothing in this feed.";
 
   const paletteCommands: PaletteCommand[] = [
+    {
+      id: "desk",
+      label: deskWaiting.length > 0 ? `Open desk (${deskWaiting.length} waiting-on)` : "Open desk",
+      run: () => {
+        setDeskOpen(true);
+        setOverlay("none");
+      },
+    },
     {
       id: "compose",
       label: "Compose",
@@ -900,6 +986,7 @@ export default function App() {
         onBulkFlag={bulkFlag}
         onClearChecked={() => setCheckedIds(new Set())}
         emptyLabel={emptyLabel}
+        receiptLine={feed === "action" ? receiptLine : null}
       />
       <Desk
         open={deskOpen}
@@ -908,6 +995,10 @@ export default function App() {
           setDeskOpen(true);
           setOverlay("staff");
         }}
+        waiting={deskWaiting}
+        receipt={receiptLine}
+        onOpen={openWaiting}
+        onDismiss={dismissWaiting}
       />
     </div>
 

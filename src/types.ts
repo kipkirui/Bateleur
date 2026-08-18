@@ -32,6 +32,9 @@ export type Message = {
   attachments?: Attachment[];
   category?: string | null;
   why?: string | null;
+  toEmail?: string;
+  rfcId?: string | null;
+  inReplyTo?: string | null;
 };
 
 export type Attachment = {

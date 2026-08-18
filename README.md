@@ -24,7 +24,7 @@ This is a universal IMAP/POP client, not a Gmail wrapper. Add any mailbox. Mail 
 
 ## Status
 
-Early (0.12.1). You can add an IMAP or POP mailbox (app password or Sign in with Google / Microsoft), sync INBOX / Sent / Drafts / Junk (IMAP), read HTML mail as designed, send through SMTP after a second confirm (IMAP APPENDs a copy to Sent), archive / unread / flag, and open or attach files. Remote images stay off until you load them. IMAP inboxes are watched with IDLE; POP is polled. New unread mail can raise an OS toast. Magazine view uses a cover, briefing, and article teasers; Raw is the dense table. Archive, flag, and send undo with `z`. `x` multi-selects. Ctrl+K searches indexed mail and runs commands. Staff is still open.
+Early (0.13.0). You can add an IMAP or POP mailbox (app password or Sign in with Google / Microsoft), sync INBOX / Sent / Drafts / Junk (IMAP), read HTML mail as designed, send through SMTP after a second confirm (IMAP APPENDs a copy to Sent), archive / unread / flag, and open or attach files. Remote images stay off until you load them. IMAP inboxes are watched with IDLE; POP is polled. New unread mail can raise an OS toast. Magazine view uses a cover, briefing, and article teasers, and stacks same-subject threads. Raw is the dense table. Archive, flag, and send undo with `z`. `x` multi-selects. Ctrl+K searches indexed mail and runs commands. Clearing Action and the desk show what you did today; unanswered sent mail after four days lands on Waiting-on. Staff is still open.
 
 Living checklist: [`STATUS.md`](./STATUS.md).  
 Product thesis: [`Make Email Great Again.md`](./Make%20Email%20Great%20Again.md).

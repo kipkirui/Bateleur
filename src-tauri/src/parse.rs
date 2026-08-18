@@ -58,6 +58,9 @@ pub fn from_rfc822(
             attachments,
             category: class.category.map(|s| s.to_string()),
             why: Some(class.reason.to_string()),
+            to_email: address_emails(parsed.to()),
+            rfc_id: clean_msgid(parsed.message_id()),
+            in_reply_to: header_ids(parsed.in_reply_to()),
         },
         extracted,
     ))
@@ -77,6 +80,46 @@ fn from_parts(parsed: &mail_parser::Message<'_>) -> (String, String) {
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| email.clone());
     (name, email)
+}
+
+fn address_emails(addr: Option<&mail_parser::Address<'_>>) -> String {
+    let Some(addr) = addr else {
+        return String::new();
+    };
+    let mut out = Vec::new();
+    for item in addr.iter() {
+        let Some(email) = item.address() else {
+            continue;
+        };
+        let email = email.trim().to_ascii_lowercase();
+        if email.is_empty() || out.iter().any(|seen: &String| seen == &email) {
+            continue;
+        }
+        out.push(email);
+    }
+    out.join(", ")
+}
+
+fn clean_msgid(raw: Option<&str>) -> Option<String> {
+    let value = raw?.trim().trim_matches(|c| c == '<' || c == '>').trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn header_ids(value: &mail_parser::HeaderValue<'_>) -> Option<String> {
+    let list = value.as_text_list()?;
+    let joined = list
+        .iter()
+        .filter_map(|item| clean_msgid(Some(item)))
+        .collect::<Vec<_>>();
+    if joined.is_empty() {
+        None
+    } else {
+        Some(joined.join(" "))
+    }
 }
 
 fn bodies(parsed: &mail_parser::Message<'_>) -> (String, Option<String>) {

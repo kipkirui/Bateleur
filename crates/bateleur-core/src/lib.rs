@@ -77,6 +77,12 @@ pub struct Message {
     pub category: Option<String>,
     #[serde(default)]
     pub why: Option<String>,
+    #[serde(default)]
+    pub to_email: String,
+    #[serde(default)]
+    pub rfc_id: Option<String>,
+    #[serde(default)]
+    pub in_reply_to: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

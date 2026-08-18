@@ -1,6 +1,7 @@
 import { useState, type MouseEvent } from "react";
 import { readableText } from "../lib/emailHtml";
 import { formatWhen, lede } from "../lib/magazine";
+import { groupStories } from "../lib/stories";
 import { Avatar } from "./Avatar";
 import type { FeedId, Message, ReaderMode } from "../types";
 
@@ -23,6 +24,7 @@ type Props = {
   onBulkFlag: () => void;
   onClearChecked: () => void;
   emptyLabel: string;
+  receiptLine?: string | null;
 };
 
 export function Feed({
@@ -44,6 +46,7 @@ export function Feed({
   onBulkFlag,
   onClearChecked,
   emptyLabel,
+  receiptLine,
 }: Props) {
   const checked = checkedIds.size;
   const selecting = checked > 0;
@@ -79,7 +82,9 @@ export function Feed({
         {actionEmpty ? (
           <div className="empty empty-clear">
             <p>Nothing needs you right now.</p>
-            <p className="muted">Action is clear. Reading is still there when you want it.</p>
+            <p className="muted">
+              {receiptLine ?? "Action is clear. Reading is still there when you want it."}
+            </p>
           </div>
         ) : messages.length === 0 ? (
           <div className="empty">{emptyLabel}</div>
@@ -127,12 +132,12 @@ export function Feed({
           <div className="magazine">
             <div className="block">
               <h2>{feedHeading(feed)}</h2>
-              {messages.map((message) => (
-                <ArticleTeaser
-                  key={message.id}
-                  message={message}
-                  selected={selectedId === message.id}
-                  checked={checkedIds.has(message.id)}
+              {groupStories(messages).map((story) => (
+                <StoryTeasers
+                  key={story.id}
+                  story={story}
+                  selectedId={selectedId}
+                  checkedIds={checkedIds}
                   selecting={selecting}
                   onSelect={onSelect}
                   onToggleCheck={onToggleCheck}
@@ -175,7 +180,9 @@ function ActionMagazine({
   onReading: (message: Message) => void;
   onSender: (message: Message) => void;
 }) {
-  const [lead, ...rest] = messages;
+  const stories = groupStories(messages);
+  const [cover, ...rest] = stories;
+  const lead = cover?.messages[0];
   return (
     <div className="magazine">
       {lead ? (
@@ -183,6 +190,7 @@ function ActionMagazine({
           <h2>Cover</h2>
           <Cover
             message={lead}
+            thread={cover.messages.length}
             selected={selectedId === lead.id}
             checked={checkedIds.has(lead.id)}
             selecting={selecting}
@@ -194,12 +202,7 @@ function ActionMagazine({
             onReading={onReading}
             onSender={onSender}
           />
-        </div>
-      ) : null}
-      {rest.length > 0 ? (
-        <div className="block briefing">
-          <h2>Briefing</h2>
-          {rest.map((message) => (
+          {cover.messages.slice(1).map((message) => (
             <BriefRow
               key={message.id}
               message={message}
@@ -213,15 +216,39 @@ function ActionMagazine({
           ))}
         </div>
       ) : null}
+      {rest.length > 0 ? (
+        <div className="block briefing">
+          <h2>Briefing</h2>
+          {rest.map((story) => (
+            <div key={story.id} className={story.messages.length > 1 ? "story-stack" : undefined}>
+              {story.messages.length > 1 ? (
+                <div className="story-kicker">{story.messages.length} letters</div>
+              ) : null}
+              {story.messages.map((message) => (
+                <BriefRow
+                  key={message.id}
+                  message={message}
+                  selected={selectedId === message.id}
+                  checked={checkedIds.has(message.id)}
+                  selecting={selecting}
+                  onSelect={onSelect}
+                  onToggleCheck={onToggleCheck}
+                  onOpen={onOpen}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : null}
       {digest.length > 0 ? (
         <div className="block">
           <h2>Reading</h2>
-          {digest.map((message) => (
-            <ArticleTeaser
-              key={message.id}
-              message={message}
-              selected={selectedId === message.id}
-              checked={checkedIds.has(message.id)}
+          {groupStories(digest).map((story) => (
+            <StoryTeasers
+              key={story.id}
+              story={story}
+              selectedId={selectedId}
+              checkedIds={checkedIds}
               selecting={selecting}
               onSelect={onSelect}
               onToggleCheck={onToggleCheck}
@@ -237,6 +264,7 @@ function ActionMagazine({
 
 function Cover({
   message,
+  thread,
   selected,
   checked,
   selecting,
@@ -249,6 +277,7 @@ function Cover({
   onSender,
 }: {
   message: Message;
+  thread: number;
   selected: boolean;
   checked: boolean;
   selecting: boolean;
@@ -267,7 +296,13 @@ function Cover({
     fn();
   }
 
-  const kicker = [message.category, message.hero?.label].filter(Boolean).join(" · ");
+  const kicker = [
+    thread > 1 ? `Developing · ${thread} letters` : null,
+    message.category,
+    message.hero?.label,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <article
@@ -401,6 +436,58 @@ function ArticleTeaser({
       </button>
       <p>{lede(message)}</p>
     </article>
+  );
+}
+
+function StoryTeasers({
+  story,
+  selectedId,
+  checkedIds,
+  selecting,
+  onSelect,
+  onToggleCheck,
+  onOpen,
+  onSender,
+}: {
+  story: { id: string; messages: Message[] };
+  selectedId: string | null;
+  checkedIds: Set<string>;
+  selecting: boolean;
+  onSelect: (id: string) => void;
+  onToggleCheck: (id: string) => void;
+  onOpen: (id: string) => void;
+  onSender: (message: Message) => void;
+}) {
+  const [lead, ...earlier] = story.messages;
+  if (!lead) return null;
+  return (
+    <div className={earlier.length > 0 ? "story-stack" : undefined}>
+      {earlier.length > 0 ? (
+        <div className="story-kicker">{story.messages.length} letters</div>
+      ) : null}
+      <ArticleTeaser
+        message={lead}
+        selected={selectedId === lead.id}
+        checked={checkedIds.has(lead.id)}
+        selecting={selecting}
+        onSelect={onSelect}
+        onToggleCheck={onToggleCheck}
+        onOpen={onOpen}
+        onSender={onSender}
+      />
+      {earlier.map((message) => (
+        <BriefRow
+          key={message.id}
+          message={message}
+          selected={selectedId === message.id}
+          checked={checkedIds.has(message.id)}
+          selecting={selecting}
+          onSelect={onSelect}
+          onToggleCheck={onToggleCheck}
+          onOpen={onOpen}
+        />
+      ))}
+    </div>
   );
 }
 

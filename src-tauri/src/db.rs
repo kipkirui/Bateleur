@@ -87,6 +87,12 @@ pub fn open(path: &std::path::Path) -> Result<Connection, String> {
     );
     let _ = conn.execute("ALTER TABLE messages ADD COLUMN category TEXT", []);
     let _ = conn.execute("ALTER TABLE messages ADD COLUMN why TEXT", []);
+    let _ = conn.execute(
+        "ALTER TABLE messages ADD COLUMN to_email TEXT NOT NULL DEFAULT ''",
+        [],
+    );
+    let _ = conn.execute("ALTER TABLE messages ADD COLUMN rfc_id TEXT", []);
+    let _ = conn.execute("ALTER TABLE messages ADD COLUMN in_reply_to TEXT", []);
     ensure_fts(&conn)?;
     Ok(conn)
 }
@@ -112,7 +118,7 @@ pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
         .prepare(
             "SELECT id, account_id, feed, from_name, from_email, subject, preview, body,
                     received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body,
-                    flagged, category, why
+                    flagged, category, why, to_email, rfc_id, in_reply_to
              FROM messages ORDER BY received_at DESC",
         )
         .map_err(err)?;
@@ -211,8 +217,8 @@ pub fn upsert_message(conn: &Connection, message: &Message) -> Result<(), String
         "INSERT OR REPLACE INTO messages
          (id, account_id, feed, from_name, from_email, subject, preview, body,
           received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body, flagged,
-          category, why)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+          category, why, to_email, rfc_id, in_reply_to)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
         params![
             message.id,
             message.account_id,
@@ -232,6 +238,9 @@ pub fn upsert_message(conn: &Connection, message: &Message) -> Result<(), String
             message.flagged as i64,
             message.category,
             message.why,
+            message.to_email,
+            message.rfc_id,
+            message.in_reply_to,
         ],
     )
     .map_err(err)?;
@@ -894,6 +903,9 @@ fn message_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
         attachments: Vec::new(),
         category: row.get::<_, Option<String>>(16).ok().flatten(),
         why: row.get::<_, Option<String>>(17).ok().flatten(),
+        to_email: row.get::<_, String>(18).unwrap_or_default(),
+        rfc_id: row.get::<_, Option<String>>(19).ok().flatten(),
+        in_reply_to: row.get::<_, Option<String>>(20).ok().flatten(),
     })
 }
 

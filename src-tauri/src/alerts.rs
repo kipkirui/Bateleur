@@ -86,6 +86,9 @@ mod tests {
             attachments: Vec::new(),
             category: None,
             why: None,
+            to_email: String::new(),
+            rfc_id: None,
+            in_reply_to: None,
         }
     }
 

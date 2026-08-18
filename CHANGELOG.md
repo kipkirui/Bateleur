@@ -8,6 +8,14 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.13.0] - 2026-08-18
+
+### Added
+
+- Session receipts: archive, flag, unread, send, and Reading moves count for the local day. Empty Action and the desk show an honest “You archived 9 today” line; after two minutes idle the same sentence can toast once
+- Waiting-on on the desk: flagged letters, plus sent letters with no matching reply after four days. Dismiss hides a stale nudge. The collapsed desk tab reads “N waiting-on” when there is a loop. The desk still does not send
+- Magazine groups same-subject threads as a developing story (cover kicker, briefing stacks). The reader lists a numbered thread when there are three or more letters. Pin / rename / merge stay staff-pending. Raw stays a flat list
+
 ## [0.12.1] - 2026-08-18
 
 ### Fixed

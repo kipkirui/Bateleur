@@ -555,6 +555,31 @@ kbd {
   margin-bottom: 8px;
 }
 
+.story-stack {
+  margin: 0 0 12px;
+  padding-bottom: 4px;
+}
+
+.story-kicker {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin: 8px 0 4px;
+}
+
+.thread-toc {
+  margin: 0 0 20px;
+  padding: 0 0 0 18px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.thread-toc .text-btn {
+  font-size: 13px;
+}
+
 .brief-row {
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr) 140px;
@@ -913,16 +938,46 @@ kbd {
   align-items: stretch;
 }
 
-.desk-tab {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
+.desk-tab.has-wait {
+  color: var(--amber);
+}
+
+.desk-wait {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.desk-wait li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.desk-wait-item {
   border: 0;
   background: transparent;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  font-size: 11px;
-  color: var(--amber);
+  padding: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   width: 100%;
+}
+
+.desk-wait-item strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.desk-wait-subject {
+  font-family: var(--font-voice);
+  font-size: 14px;
+  line-height: 1.35;
 }
 
 .desk-head {
