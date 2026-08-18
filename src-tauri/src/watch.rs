@@ -157,6 +157,17 @@ fn refresh_account(app: &AppHandle, account_id: &str, notify: bool) -> Result<Ma
     };
     if notify {
         crate::alerts::new_mail(app, &fresh);
+        let ids: Vec<String> = fresh
+            .iter()
+            .filter(|m| m.folder == "inbox" && m.unread)
+            .map(|m| m.id.clone())
+            .collect();
+        if !ids.is_empty() {
+            let app = app.clone();
+            let _ = std::thread::Builder::new()
+                .name("bateleur-staff-new".into())
+                .spawn(move || crate::staff::run_new_mail(&app, &ids));
+        }
     }
     Ok(mailbox)
 }

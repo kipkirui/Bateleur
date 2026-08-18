@@ -1402,6 +1402,32 @@ kbd {
   text-transform: uppercase;
 }
 
+.morning-brief {
+  margin: 0 18px 8px;
+  padding: 12px 0 10px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.brief-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.brief-items {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.brief-items button {
+  text-align: left;
+}
+
 .staff-note {
   margin: 0 0 20px;
   padding: 12px 0;

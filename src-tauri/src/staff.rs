@@ -23,6 +23,10 @@ pub struct StaffHire {
     #[serde(default)]
     pub summarize: bool,
     #[serde(default)]
+    pub summarize_account: bool,
+    #[serde(default)]
+    pub summarize_new: bool,
+    #[serde(default)]
     pub drafts: bool,
 }
 
@@ -34,6 +38,8 @@ pub struct StaffStatus {
     pub model: String,
     pub endpoint: String,
     pub summarize: bool,
+    pub summarize_account: bool,
+    pub summarize_new: bool,
     pub drafts: bool,
 }
 
@@ -57,6 +63,21 @@ pub struct StaffLetter {
     pub draft: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffBriefItem {
+    pub id: String,
+    pub line: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaffBrief {
+    pub blurb: String,
+    pub items: Vec<StaffBriefItem>,
+    pub at: String,
+}
+
 #[derive(Clone)]
 pub struct Runtime {
     provider: String,
@@ -74,6 +95,8 @@ pub fn status(conn: &Connection) -> Result<StaffStatus, String> {
         model: db::pref_string(conn, "staff_model", "")?,
         endpoint: db::pref_string(conn, "staff_endpoint", "")?,
         summarize: db::pref_bool_or(conn, "staff_summarize", false)?,
+        summarize_account: db::pref_bool_or(conn, "staff_summarize_account", false)?,
+        summarize_new: db::pref_bool_or(conn, "staff_summarize_new", false)?,
         drafts: db::pref_bool_or(conn, "staff_drafts", false)?,
     })
 }
@@ -101,6 +124,16 @@ pub fn save(conn: &Connection, hire: StaffHire) -> Result<StaffStatus, String> {
         "staff_summarize",
         if hire.summarize { "1" } else { "0" },
     )?;
+    db::set_pref(
+        conn,
+        "staff_summarize_account",
+        if hire.summarize_account { "1" } else { "0" },
+    )?;
+    db::set_pref(
+        conn,
+        "staff_summarize_new",
+        if hire.summarize_new { "1" } else { "0" },
+    )?;
     db::set_pref(conn, "staff_drafts", if hire.drafts { "1" } else { "0" })?;
     status(conn)
 }
@@ -108,6 +141,8 @@ pub fn save(conn: &Connection, hire: StaffHire) -> Result<StaffStatus, String> {
 pub fn clear(conn: &Connection) -> Result<StaffStatus, String> {
     secrets::delete_staff_key()?;
     db::set_pref(conn, "staff_summarize", "0")?;
+    db::set_pref(conn, "staff_summarize_account", "0")?;
+    db::set_pref(conn, "staff_summarize_new", "0")?;
     db::set_pref(conn, "staff_drafts", "0")?;
     status(conn)
 }
@@ -173,6 +208,204 @@ pub fn store_draft(conn: &Connection, message_id: &str, draft: &StaffDraft) -> R
     db::set_staff_note(conn, message_id, "draft", &draft.body, "")
 }
 
+const BRIEF_LIMIT: usize = 12;
+const NEW_MAIL_LIMIT: usize = 8;
+
+pub fn brief_id(account_id: Option<&str>) -> String {
+    match account_id {
+        Some(id) if !id.is_empty() => format!("brief:{id}"),
+        _ => "brief:all".into(),
+    }
+}
+
+pub fn load_brief(conn: &Connection, account_id: Option<&str>) -> Result<Option<StaffBrief>, String> {
+    match db::staff_note(conn, &brief_id(account_id), "brief")? {
+        Some((body, extra, at)) => Ok(Some(StaffBrief {
+            blurb: body,
+            items: parse_brief_items(&extra),
+            at,
+        })),
+        None => Ok(None),
+    }
+}
+
+pub fn prepare_brief(
+    conn: &Connection,
+    account_id: Option<&str>,
+) -> Result<(Runtime, Vec<Message>), String> {
+    if !db::pref_bool_or(conn, "staff_summarize_account", false)? {
+        return Err("Turn on Summarize this account in Hire staff.".into());
+    }
+    let runtime = runtime(conn)?;
+    let letters = db::brief_candidates(conn, account_id, BRIEF_LIMIT)?;
+    Ok((runtime, letters))
+}
+
+pub fn write_brief(runtime: &Runtime, letters: &[Message]) -> Result<StaffBrief, String> {
+    if letters.is_empty() {
+        return Ok(StaffBrief {
+            blurb: "Nothing needs you right now.".into(),
+            items: Vec::new(),
+            at: chrono::Utc::now().to_rfc3339(),
+        });
+    }
+    let text = complete(
+        runtime,
+        "You are the editor-in-chief of a local mail desk. Write a morning brief. Reply with JSON only: {\"blurb\":\"two to four sentences on what needs the editor\",\"items\":[{\"id\":\"the id given\",\"line\":\"one clause\"}]}. Use only the ids you were given. No greeting. No markdown.",
+        &brief_prompt(letters),
+    )?;
+    Ok(parse_brief(&text, letters))
+}
+
+pub fn store_brief(
+    conn: &Connection,
+    account_id: Option<&str>,
+    brief: &StaffBrief,
+) -> Result<(), String> {
+    let extra = serde_json::to_string(&brief.items).unwrap_or_else(|_| "[]".into());
+    db::set_staff_note(conn, &brief_id(account_id), "brief", &brief.blurb, &extra)
+}
+
+pub fn prepare_new(conn: &Connection, ids: &[String]) -> Result<Option<(Runtime, Vec<Message>)>, String> {
+    if ids.is_empty() {
+        return Ok(None);
+    }
+    if !db::pref_bool_or(conn, "staff_summarize_new", false)? {
+        return Ok(None);
+    }
+    if !secrets::staff_key_present() {
+        return Ok(None);
+    }
+    let runtime = match runtime(conn) {
+        Ok(runtime) => runtime,
+        Err(_) => return Ok(None),
+    };
+    let mut letters = Vec::new();
+    for id in ids.iter().take(NEW_MAIL_LIMIT) {
+        if db::staff_note(conn, id, "summary")?.is_some() {
+            continue;
+        }
+        let Ok(message) = db::get_message(conn, id) else {
+            continue;
+        };
+        if message.folder == "inbox" && message.unread {
+            letters.push(message);
+        }
+    }
+    if letters.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some((runtime, letters)))
+    }
+}
+
+pub fn run_new_mail(app: &tauri::AppHandle, ids: &[String]) {
+    use tauri::Manager;
+    if ids.is_empty() {
+        return;
+    }
+    let prepared = {
+        let state = app.state::<crate::AppState>();
+        let Ok(conn) = state.db.lock() else {
+            return;
+        };
+        match prepare_new(&conn, ids) {
+            Ok(Some(work)) => work,
+            _ => return,
+        }
+    };
+    for message in prepared.1 {
+        if let Ok(summary) = summarize(&prepared.0, &message) {
+            let state = app.state::<crate::AppState>();
+            let locked = state.db.lock();
+            if let Ok(conn) = locked {
+                let _ = store_summary(&conn, &message.id, &summary);
+            }
+        }
+    }
+}
+
+fn runtime(conn: &Connection) -> Result<Runtime, String> {
+    Ok(Runtime {
+        provider: parse_provider(&db::pref_string(conn, "staff_provider", "openai")?)?.to_string(),
+        model: db::pref_string(conn, "staff_model", "")?,
+        endpoint: db::pref_string(conn, "staff_endpoint", "")?,
+        key: secrets::load_staff_key()?,
+    })
+}
+
+fn brief_prompt(letters: &[Message]) -> String {
+    let mut out = String::from("Unread Action mail, newest first:\n");
+    for letter in letters {
+        out.push_str(&format!(
+            "\nid={}\nFrom: {}\nSubject: {}\nPreview: {}\n",
+            letter.id,
+            if letter.from_name.is_empty() {
+                letter.from_email.clone()
+            } else {
+                format!("{} <{}>", letter.from_name, letter.from_email)
+            },
+            letter.subject,
+            clip_text(&letter.preview, 280)
+        ));
+    }
+    out
+}
+
+fn parse_brief(raw: &str, letters: &[Message]) -> StaffBrief {
+    let cleaned = strip_fences(raw);
+    let known: std::collections::HashSet<&str> = letters.iter().map(|m| m.id.as_str()).collect();
+    if let Ok(value) = serde_json::from_str::<Value>(cleaned) {
+        let blurb = value["blurb"]
+            .as_str()
+            .unwrap_or(cleaned)
+            .trim()
+            .to_string();
+        let items = value["items"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| {
+                        let id = item["id"].as_str().unwrap_or_default().trim();
+                        if !known.contains(id) {
+                            return None;
+                        }
+                        let line = item["line"]
+                            .as_str()
+                            .or_else(|| item["blurb"].as_str())
+                            .unwrap_or("")
+                            .trim();
+                        if line.is_empty() {
+                            return None;
+                        }
+                        Some(StaffBriefItem {
+                            id: id.to_string(),
+                            line: line.to_string(),
+                        })
+                    })
+                    .take(8)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if !blurb.is_empty() {
+            return StaffBrief {
+                blurb,
+                items,
+                at: chrono::Utc::now().to_rfc3339(),
+            };
+        }
+    }
+    StaffBrief {
+        blurb: cleaned.trim().to_string(),
+        items: Vec::new(),
+        at: chrono::Utc::now().to_rfc3339(),
+    }
+}
+
+fn parse_brief_items(extra: &str) -> Vec<StaffBriefItem> {
+    serde_json::from_str(extra).unwrap_or_default()
+}
+
 fn prepare(
     conn: &Connection,
     message_id: &str,
@@ -182,20 +415,9 @@ fn prepare(
     if !db::pref_bool_or(conn, pref, false)? {
         return Err(off_message.into());
     }
-    let provider = parse_provider(&db::pref_string(conn, "staff_provider", "openai")?)?.to_string();
-    let model = db::pref_string(conn, "staff_model", "")?;
-    let endpoint = db::pref_string(conn, "staff_endpoint", "")?;
-    let key = secrets::load_staff_key()?;
+    let runtime = runtime(conn)?;
     let message = db::get_message(conn, message_id)?;
-    Ok((
-        Runtime {
-            provider,
-            model,
-            endpoint,
-            key,
-        },
-        message,
-    ))
+    Ok((runtime, message))
 }
 
 fn letter_prompt(message: &Message) -> String {
@@ -666,5 +888,45 @@ mod tests {
             "gemini-2.5-flash-preview-tts".into(),
         ];
         assert_eq!(pick_gemini_model(&names).unwrap(), "gemini-flash-latest");
+    }
+
+    #[test]
+    fn brief_id_is_per_mailbox() {
+        assert_eq!(brief_id(None), "brief:all");
+        assert_eq!(brief_id(Some("abc")), "brief:abc");
+    }
+
+    #[test]
+    fn parse_brief_keeps_known_ids() {
+        let letter = bateleur_core::Message {
+            id: "m1".into(),
+            account_id: "a".into(),
+            feed: "action".into(),
+            from_name: "Sam".into(),
+            from_email: "sam@x.test".into(),
+            subject: "Q3".into(),
+            preview: "Need a look".into(),
+            body: String::new(),
+            html_body: None,
+            received_at: String::new(),
+            unread: true,
+            waiting_on: false,
+            flagged: false,
+            folder: "inbox".into(),
+            hero: None,
+            attachments: vec![],
+            category: None,
+            why: None,
+            to_email: String::new(),
+            rfc_id: None,
+            in_reply_to: None,
+        };
+        let brief = parse_brief(
+            r#"{"blurb":"Two letters need you.","items":[{"id":"m1","line":"Sam wants a look at Q3"},{"id":"nope","line":"ignore"}]}"#,
+            &[letter],
+        );
+        assert_eq!(brief.blurb, "Two letters need you.");
+        assert_eq!(brief.items.len(), 1);
+        assert_eq!(brief.items[0].id, "m1");
     }
 }

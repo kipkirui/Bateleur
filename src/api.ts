@@ -7,6 +7,7 @@ import type {
   OAuthStatus,
   SendDraft,
   ServerGuess,
+  StaffBrief,
   StaffDraft,
   StaffHire,
   StaffLetter,
@@ -188,6 +189,8 @@ const EMPTY_STAFF: StaffStatus = {
   model: "",
   endpoint: "",
   summarize: false,
+  summarizeAccount: false,
+  summarizeNew: false,
   drafts: false,
 };
 
@@ -227,4 +230,16 @@ export async function draftReply(messageId: string): Promise<StaffDraft> {
     throw new Error("Drafts need the desktop app.");
   }
   return invoke<StaffDraft>("draft_reply", { messageId });
+}
+
+export async function staffBrief(accountId: string | null): Promise<StaffBrief | null> {
+  if (!isTauri()) return null;
+  return invoke<StaffBrief | null>("staff_brief", { accountId });
+}
+
+export async function summarizeAccount(accountId: string | null): Promise<StaffBrief> {
+  if (!isTauri()) {
+    throw new Error("The Brief needs the desktop app.");
+  }
+  return invoke<StaffBrief>("summarize_account", { accountId });
 }

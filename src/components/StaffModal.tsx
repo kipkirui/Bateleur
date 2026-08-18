@@ -28,6 +28,8 @@ export function StaffModal({ onClose, onChange }: Props) {
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [summarize, setSummarize] = useState(false);
+  const [summarizeAccount, setSummarizeAccount] = useState(false);
+  const [summarizeNew, setSummarizeNew] = useState(false);
   const [drafts, setDrafts] = useState(false);
   const [hired, setHired] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -63,6 +65,8 @@ export function StaffModal({ onClose, onChange }: Props) {
     setModel(status.model);
     setEndpoint(status.endpoint);
     setSummarize(status.summarize);
+    setSummarizeAccount(status.summarizeAccount);
+    setSummarizeNew(status.summarizeNew);
     setDrafts(status.drafts);
     onChange(status);
   }
@@ -78,13 +82,15 @@ export function StaffModal({ onClose, onChange }: Props) {
         endpoint,
         key: apiKey,
         summarize,
+        summarizeAccount,
+        summarizeNew,
         drafts,
       });
       applyStatus(status);
       setApiKey("");
       setNote(
-        status.summarize || status.drafts
-          ? "Staff is hired. Open a letter to run a capability."
+        status.summarize || status.summarizeAccount || status.summarizeNew || status.drafts
+          ? "Staff is hired. Open a letter or write the Brief from the desk."
           : "Key stored. Turn on a capability to run.",
       );
     } catch (err) {
@@ -176,6 +182,22 @@ export function StaffModal({ onClose, onChange }: Props) {
             onChange={(event) => setSummarize(event.target.checked)}
           />
           Summarize this message
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={summarizeAccount}
+            onChange={(event) => setSummarizeAccount(event.target.checked)}
+          />
+          Summarize this account (Morning Brief)
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={summarizeNew}
+            onChange={(event) => setSummarizeNew(event.target.checked)}
+          />
+          Summarize all new mail (on sync)
         </label>
         <label className="check">
           <input

@@ -2,9 +2,12 @@ type Props = {
   open: boolean;
   onToggle: () => void;
   onHire: () => void;
+  onBrief?: () => void;
+  briefBusy?: boolean;
   receipt: string | null;
   hired: boolean;
   summarize: boolean;
+  summarizeAccount: boolean;
   drafts: boolean;
 };
 
@@ -12,9 +15,12 @@ export function Desk({
   open,
   onToggle,
   onHire,
+  onBrief,
+  briefBusy,
   receipt,
   hired,
   summarize,
+  summarizeAccount,
   drafts,
 }: Props) {
   if (!open) {
@@ -28,7 +34,7 @@ export function Desk({
   }
 
   const copy = hired
-    ? deskCopy(summarize, drafts)
+    ? deskCopy(summarize, summarizeAccount, drafts)
     : "Summaries and drafts stay off until you paste a key. Mail still works without staff. The desk never sends.";
 
   return (
@@ -40,7 +46,17 @@ export function Desk({
         </button>
       </div>
       <p className="desk-copy">{copy}</p>
-      <button type="button" className="desk-cta" onClick={onHire}>
+      {hired && summarizeAccount && onBrief ? (
+        <button
+          type="button"
+          className="desk-cta"
+          disabled={briefBusy}
+          onClick={onBrief}
+        >
+          {briefBusy ? "Writing…" : "Write the Brief"}
+        </button>
+      ) : null}
+      <button type="button" className={hired && summarizeAccount ? "text-btn" : "desk-cta"} onClick={onHire}>
         {hired ? "Edit staff" : "Hire staff"}
       </button>
       <div className="desk-label">Today</div>
@@ -49,7 +65,10 @@ export function Desk({
   );
 }
 
-function deskCopy(summarize: boolean, drafts: boolean): string {
+function deskCopy(summarize: boolean, summarizeAccount: boolean, drafts: boolean): string {
+  if (summarizeAccount) {
+    return "The Brief is a deck of unread Action. Write it from here or the feed. The desk never sends.";
+  }
   if (summarize && drafts) {
     return "Summarize or draft from the reader. A draft opens in Compose — Send is still yours. The desk never sends.";
   }

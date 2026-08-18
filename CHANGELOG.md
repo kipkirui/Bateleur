@@ -8,7 +8,14 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
-## [0.15.2] - 2026-08-18
+## [0.16.0] - 2026-08-18
+
+### Added
+
+- **Summarize this account** writes a Morning Brief from unread Action (on demand from the feed, desk, or Ctrl+K)
+- **Summarize all new mail** is opt-in: after IDLE or Sync, up to eight new unread inbox letters get a per-letter blurb. Mail still works if a call fails. Batch-on-sync stays off until that switch is on
+
+
 
 ### Fixed
 

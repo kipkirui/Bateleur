@@ -4,7 +4,8 @@ import { formatWhen, lede } from "../lib/magazine";
 import { groupStories } from "../lib/stories";
 import type { WaitingItem } from "../lib/waiting";
 import { Avatar } from "./Avatar";
-import type { FeedId, Message, ReaderMode } from "../types";
+import { MorningBrief } from "./MorningBrief";
+import type { FeedId, Message, ReaderMode, StaffBrief } from "../types";
 
 type Props = {
   onPalette: () => void;
@@ -28,6 +29,11 @@ type Props = {
   receiptLine?: string | null;
   awaiting?: WaitingItem[];
   onDismissAwaiting?: (id: string) => void;
+  brief?: StaffBrief | null;
+  briefBusy?: boolean;
+  briefError?: string | null;
+  showBrief?: boolean;
+  onWriteBrief?: () => void;
 };
 
 export function Feed({
@@ -52,6 +58,11 @@ export function Feed({
   receiptLine,
   awaiting = [],
   onDismissAwaiting,
+  brief = null,
+  briefBusy = false,
+  briefError = null,
+  showBrief = false,
+  onWriteBrief,
 }: Props) {
   const checked = checkedIds.size;
   const selecting = checked > 0;
@@ -81,6 +92,16 @@ export function Feed({
             </button>
           </span>
         </div>
+      ) : null}
+
+      {showBrief && feed === "action" && onWriteBrief ? (
+        <MorningBrief
+          brief={brief}
+          busy={briefBusy}
+          error={briefError}
+          onWrite={onWriteBrief}
+          onOpen={onOpen}
+        />
       ) : null}
 
       <div className="feed-scroll">

@@ -151,6 +151,8 @@ export type StaffStatus = {
   model: string;
   endpoint: string;
   summarize: boolean;
+  summarizeAccount: boolean;
+  summarizeNew: boolean;
   drafts: boolean;
 };
 
@@ -160,6 +162,8 @@ export type StaffHire = {
   endpoint: string;
   key: string;
   summarize: boolean;
+  summarizeAccount: boolean;
+  summarizeNew: boolean;
   drafts: boolean;
 };
 
@@ -175,4 +179,15 @@ export type StaffDraft = {
 export type StaffLetter = {
   summary: StaffSummary | null;
   draft: string | null;
+};
+
+export type StaffBriefItem = {
+  id: string;
+  line: string;
+};
+
+export type StaffBrief = {
+  blurb: string;
+  items: StaffBriefItem[];
+  at: string;
 };

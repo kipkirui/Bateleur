@@ -344,6 +344,10 @@ async fn sync_account(
     .await
     .map_err(|e| e.to_string())??;
 
+    let existing = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::message_ids(&conn, &account.id)?
+    };
     let mailbox = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::apply_fetch(
@@ -355,6 +359,13 @@ async fn sync_account(
             &fetched.pop_uidls,
         )?
     };
+    let fresh: Vec<String> = fetched
+        .messages
+        .iter()
+        .filter(|m| !existing.contains(&m.id) && m.folder == "inbox" && m.unread)
+        .map(|m| m.id.clone())
+        .collect();
+    kick_new_mail_summaries(app.clone(), fresh);
     let _ = app.emit(
         "sync-status",
         watch::SyncEvent {
@@ -650,6 +661,43 @@ async fn draft_reply(
     Ok(draft)
 }
 
+#[tauri::command]
+fn staff_brief(
+    state: State<AppState>,
+    account_id: Option<String>,
+) -> Result<Option<staff::StaffBrief>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    staff::load_brief(&conn, account_id.as_deref())
+}
+
+#[tauri::command]
+async fn summarize_account(
+    state: State<'_, AppState>,
+    account_id: Option<String>,
+) -> Result<staff::StaffBrief, String> {
+    let (runtime, letters) = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        staff::prepare_brief(&conn, account_id.as_deref())?
+    };
+    let brief = tauri::async_runtime::spawn_blocking(move || staff::write_brief(&runtime, &letters))
+        .await
+        .map_err(|e| e.to_string())??;
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        staff::store_brief(&conn, account_id.as_deref(), &brief)?;
+    }
+    Ok(brief)
+}
+
+fn kick_new_mail_summaries(app: AppHandle, ids: Vec<String>) {
+    if ids.is_empty() {
+        return;
+    }
+    let _ = std::thread::Builder::new()
+        .name("bateleur-staff-new".into())
+        .spawn(move || staff::run_new_mail(&app, &ids));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tls::install();
@@ -692,7 +740,9 @@ pub fn run() {
             clear_staff,
             staff_letter,
             summarize_mail,
-            draft_reply
+            draft_reply,
+            staff_brief,
+            summarize_account
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

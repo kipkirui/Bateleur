@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, searchMail, sendMail, setFlag, setMailAlerts, staffStatus as loadStaffStatus, syncAccount } from "./api";
+import { addAccount, addAccountOAuth, archiveMessage, hydrateMailbox, isTauri, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToReading, removeAccount, resetSender, searchMail, sendMail, setFlag, setMailAlerts, staffBrief as loadStaffBrief, staffStatus as loadStaffStatus, summarizeAccount as writeStaffBrief, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -12,7 +12,7 @@ import { Settings } from "./components/Settings";
 import { SenderPage } from "./components/SenderPage";
 import { Palette, type PaletteCommand } from "./components/Palette";
 import { StaffModal } from "./components/StaffModal";
-import type { AccountDraft, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, StaffStatus, SyncStatus } from "./types";
+import type { AccountDraft, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, StaffBrief, StaffStatus, SyncStatus } from "./types";
 import type { MailTo } from "./lib/links";
 import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
 import { fromMessage, withQuote, replySubject, type ComposeQuote } from "./lib/quote";
@@ -56,8 +56,13 @@ export default function App() {
     model: "",
     endpoint: "",
     summarize: false,
+    summarizeAccount: false,
+    summarizeNew: false,
     drafts: false,
   });
+  const [brief, setBrief] = useState<StaffBrief | null>(null);
+  const [briefBusy, setBriefBusy] = useState(false);
+  const [briefError, setBriefError] = useState<string | null>(null);
   const [composeTo, setComposeTo] = useState("");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
@@ -115,6 +120,24 @@ export default function App() {
     void loadMailAlerts().then(setMailAlertsOn).catch(() => {});
     void loadStaffStatus().then(setStaff).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!isTauri() || !staff.summarizeAccount) {
+      setBrief(null);
+      return;
+    }
+    let cancelled = false;
+    void loadStaffBrief(accountId)
+      .then((next) => {
+        if (!cancelled) setBrief(next);
+      })
+      .catch(() => {
+        if (!cancelled) setBrief(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, staff.summarizeAccount]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -250,6 +273,19 @@ export default function App() {
     setSendError(null);
     setOverlay("compose");
   }, [accountId, accounts]);
+
+  async function writeBrief() {
+    setBriefBusy(true);
+    setBriefError(null);
+    setFeed("action");
+    try {
+      setBrief(await writeStaffBrief(accountId));
+    } catch (err) {
+      setBriefError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBriefBusy(false);
+    }
+  }
 
   async function onAddAccount(draft: AccountDraft) {
     setAccountBusy(true);
@@ -811,6 +847,15 @@ export default function App() {
       },
     },
     {
+      id: "brief",
+      label: "Morning Brief",
+      run: () => {
+        setFeed("action");
+        setOverlay("none");
+        if (staff.hired && staff.summarizeAccount) void writeBrief();
+      },
+    },
+    {
       id: "desk",
       label: "Open staff desk",
       run: () => {
@@ -1013,6 +1058,11 @@ export default function App() {
         receiptLine={feed === "action" ? receiptLine : null}
         awaiting={feed === "awaiting" ? awaiting : []}
         onDismissAwaiting={dismissWaiting}
+        brief={brief}
+        briefBusy={briefBusy}
+        briefError={briefError}
+        showBrief={staff.hired && staff.summarizeAccount}
+        onWriteBrief={() => void writeBrief()}
       />
       <Desk
         open={deskOpen}
@@ -1021,9 +1071,12 @@ export default function App() {
           setDeskOpen(true);
           setOverlay("staff");
         }}
+        onBrief={() => void writeBrief()}
+        briefBusy={briefBusy}
         receipt={receiptLine}
         hired={staff.hired}
         summarize={staff.summarize}
+        summarizeAccount={staff.summarizeAccount}
         drafts={staff.drafts}
       />
     </div>

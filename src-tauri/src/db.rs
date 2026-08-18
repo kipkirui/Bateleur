@@ -192,12 +192,14 @@ pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
     })
 }
 
-pub fn get_message(conn: &Connection, id: &str) -> Result<Message, String> {
-    conn.query_row(
-        "SELECT id, account_id, feed, from_name, from_email, subject, preview, body,
+const MESSAGE_SELECT: &str = "SELECT id, account_id, feed, from_name, from_email, subject, preview, body,
                 received_at, unread, waiting_on, folder, hero_label, hero_tone, html_body,
                 flagged, category, why, to_email, rfc_id, in_reply_to
-         FROM messages WHERE id = ?1",
+         FROM messages";
+
+pub fn get_message(conn: &Connection, id: &str) -> Result<Message, String> {
+    conn.query_row(
+        &format!("{MESSAGE_SELECT} WHERE id = ?1"),
         [id],
         message_from_row,
     )
@@ -205,6 +207,45 @@ pub fn get_message(conn: &Connection, id: &str) -> Result<Message, String> {
         rusqlite::Error::QueryReturnedNoRows => "That letter is not in the cache.".into(),
         other => other.to_string(),
     })
+}
+
+pub fn brief_candidates(
+    conn: &Connection,
+    account_id: Option<&str>,
+    limit: usize,
+) -> Result<Vec<Message>, String> {
+    let cap = limit.max(1) as i64;
+    let mut out = Vec::new();
+    if let Some(account) = account_id {
+        let mut stmt = conn
+            .prepare(&format!(
+                "{MESSAGE_SELECT}
+                 WHERE unread = 1 AND folder = 'inbox' AND feed = 'action' AND account_id = ?1
+                 ORDER BY received_at DESC LIMIT ?2"
+            ))
+            .map_err(err)?;
+        let rows = stmt
+            .query_map(params![account, cap], message_from_row)
+            .map_err(err)?;
+        for row in rows {
+            out.push(row.map_err(err)?);
+        }
+    } else {
+        let mut stmt = conn
+            .prepare(&format!(
+                "{MESSAGE_SELECT}
+                 WHERE unread = 1 AND folder = 'inbox' AND feed = 'action'
+                 ORDER BY received_at DESC LIMIT ?1"
+            ))
+            .map_err(err)?;
+        let rows = stmt
+            .query_map(params![cap], message_from_row)
+            .map_err(err)?;
+        for row in rows {
+            out.push(row.map_err(err)?);
+        }
+    }
+    Ok(out)
 }
 
 pub fn upsert_account(conn: &Connection, account: &Account) -> Result<(), String> {
