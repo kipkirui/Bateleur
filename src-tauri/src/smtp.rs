@@ -38,28 +38,55 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
 
     let from = mailbox_addr(Some(&account.label), &account.address)?;
     let recipients = parse_recipients(&draft.to)?;
+    let cc = parse_address_list(&draft.cc, "Cc")?;
+    let bcc = parse_address_list(&draft.bcc, "Bcc")?;
     let subject = draft.subject.trim();
     let body = draft.body.trim_end().to_string();
     if body.trim().is_empty() {
         return Err("The letter is empty.".into());
     }
 
+    let local_id = format!("sent:{}:{}", account.id, uuid::Uuid::new_v4());
+    let rfc_id = format!("{}@bateleur", uuid::Uuid::new_v4());
     let mut builder = SmtpMessage::builder().from(from.clone());
     for rcpt in &recipients {
         builder = builder.to(rcpt.clone());
     }
-    let builder = builder.subject(if subject.is_empty() {
-        "(no subject)"
-    } else {
-        subject
-    });
+    for rcpt in &cc {
+        builder = builder.cc(rcpt.clone());
+    }
+    for rcpt in &bcc {
+        builder = builder.bcc(rcpt.clone());
+    }
+    builder = builder
+        .subject(if subject.is_empty() {
+            "(no subject)"
+        } else {
+            subject
+        })
+        .message_id(Some(format!("<{rfc_id}>")));
+    if let Some(parent) = draft
+        .in_reply_to
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let ids: Vec<String> = parent
+            .split_whitespace()
+            .map(wrap_msgid)
+            .filter(|id| id.len() > 2)
+            .collect();
+        if let Some(first) = ids.first() {
+            builder = builder.in_reply_to(first.clone());
+            builder = builder.references(ids.join(" "));
+        }
+    }
     let html = draft
         .html
         .as_deref()
         .map(str::trim)
         .filter(|h| !h.is_empty() && looks_like_markup(h));
-    let message_id = format!("sent:{}:{}", account.id, uuid::Uuid::new_v4());
-    let parts = attach::from_draft(&message_id, &draft.attachments)?;
+    let parts = attach::from_draft(&local_id, &draft.attachments)?;
     let email = build_letter(builder, &body, html, &parts)?;
 
     let creds = Credentials::new(user.to_string(), secret);
@@ -73,7 +100,7 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
         .collect::<Vec<_>>()
         .join(", ");
     let message = Message {
-        id: message_id,
+        id: local_id,
         account_id: account.id.clone(),
         feed: "reading".into(),
         from_name: from.name.unwrap_or_else(|| account.address.clone()),
@@ -96,9 +123,19 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
         category: None,
         why: None,
         to_email: to_line.to_ascii_lowercase(),
-        cc_email: String::new(),
-        rfc_id: None,
-        in_reply_to: None,
+        cc_email: cc
+            .iter()
+            .map(|m| m.email.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+            .to_ascii_lowercase(),
+        rfc_id: Some(rfc_id),
+        in_reply_to: draft
+            .in_reply_to
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string),
         invite: None,
     };
     Ok((message, rfc822, parts))
@@ -199,20 +236,34 @@ fn wrap_html(html: &str) -> String {
 }
 
 fn parse_recipients(to: &str) -> Result<Vec<Mailbox>, String> {
+    let out = parse_address_list(to, "To")?;
+    if out.is_empty() {
+        return Err("To needs at least one address.".into());
+    }
+    Ok(out)
+}
+
+fn parse_address_list(value: &str, field: &str) -> Result<Vec<Mailbox>, String> {
     let mut out = Vec::new();
-    for part in to.split([',', ';']) {
+    for part in value.split([',', ';']) {
         let part = part.trim();
         if part.is_empty() {
             continue;
         }
         out.push(Mailbox::from_str(part).map_err(|_| {
-            format!("“{part}” is not a valid address. Use name@host, comma-separated for several.")
+            format!("“{part}” is not a valid {field} address. Use name@host, comma-separated for several.")
         })?);
     }
-    if out.is_empty() {
-        return Err("To needs at least one address.".into());
-    }
     Ok(out)
+}
+
+fn wrap_msgid(raw: &str) -> String {
+    let value = raw.trim().trim_matches(|c| c == '<' || c == '>').trim();
+    if value.is_empty() {
+        String::new()
+    } else {
+        format!("<{value}>")
+    }
 }
 
 fn mailbox_addr(name: Option<&str>, address: &str) -> Result<Mailbox, String> {
@@ -242,4 +293,20 @@ fn friendly(err: lettre::transport::smtp::Error) -> String {
         return format!("Could not reach the SMTP host. Check the server and port. ({raw})");
     }
     format!("SMTP send failed ({raw})")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wrap_msgid_adds_brackets() {
+        assert_eq!(wrap_msgid("abc@host"), "<abc@host>");
+        assert_eq!(wrap_msgid("<abc@host>"), "<abc@host>");
+    }
+
+    #[test]
+    fn cc_list_can_be_empty() {
+        assert!(parse_address_list("", "Cc").unwrap().is_empty());
+    }
 }

@@ -1,5 +1,7 @@
 export type MailTo = {
   to: string;
+  cc?: string;
+  bcc?: string;
   subject: string;
   body: string;
 };
@@ -34,6 +36,8 @@ export function parseMailto(href: string): MailTo | null {
   const params = new URLSearchParams(query);
   return {
     to,
+    cc: params.get("cc") ?? "",
+    bcc: params.get("bcc") ?? "",
     subject: params.get("subject") ?? "",
     body: params.get("body") ?? "",
   };

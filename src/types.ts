@@ -108,11 +108,14 @@ export type OAuthStatus = {
 export type SendDraft = {
   accountId: string;
   to: string;
+  cc?: string;
+  bcc?: string;
   subject: string;
   body: string;
   confirm: boolean;
   html?: string | null;
   attachments?: DraftAttachment[];
+  inReplyTo?: string | null;
 };
 
 export type DraftAttachment = {

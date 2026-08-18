@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { readableText } from "../lib/emailHtml";
 import { loadComposeBleedPref, saveComposeBleedPref } from "../lib/prefs";
 import { quoteHeading, type ComposeQuote } from "../lib/quote";
@@ -12,13 +12,18 @@ import { ConfirmModal } from "./ConfirmModal";
 import { LetterEditor } from "./LetterEditor";
 
 type Props = {
+  heading?: string;
   accounts: Account[];
   fromId: string;
   onFrom: (id: string) => void;
   to: string;
+  cc: string;
+  bcc: string;
   subject: string;
   body: string;
   onTo: (value: string) => void;
+  onCc: (value: string) => void;
+  onBcc: (value: string) => void;
   onSubject: (value: string) => void;
   onBody: (value: string) => void;
   files: DraftAttachment[];
@@ -31,13 +36,18 @@ type Props = {
 };
 
 export function Compose({
+  heading = "New letter",
   accounts,
   fromId,
   onFrom,
   to,
+  cc,
+  bcc,
   subject,
   body,
   onTo,
+  onCc,
+  onBcc,
   onSubject,
   onBody,
   files,
@@ -53,9 +63,16 @@ export function Compose({
   const [snippets, setSnippets] = useState(loadSnippets);
   const [draftTrigger, setDraftTrigger] = useState("");
   const [draftBody, setDraftBody] = useState("");
+  const [showCc, setShowCc] = useState(() => cc.trim().length > 0);
+  const [showBcc, setShowBcc] = useState(() => bcc.trim().length > 0);
   const hasBody = readableText(body).length > 0;
   const canSend =
     accounts.length > 0 && to.trim().length > 0 && hasBody && !busy;
+
+  useEffect(() => {
+    if (cc.trim()) setShowCc(true);
+    if (bcc.trim()) setShowBcc(true);
+  }, [cc, bcc]);
 
   function toggleBleed() {
     const next = !bleed;
@@ -94,7 +111,7 @@ export function Compose({
         }}
       >
         <header>
-          <span>{quote ? "Reply" : "New letter"}</span>
+          <span>{heading}</span>
           <span className="composer-head-actions">
             <button type="button" className="text-btn" onClick={toggleBleed}>
               {bleed ? "Exit focus" : "Focus"}
@@ -127,6 +144,40 @@ export function Compose({
             required
           />
         </label>
+        {showCc ? (
+          <label>
+            Cc
+            <input
+              value={cc}
+              onChange={(e) => onCc(e.target.value)}
+              autoComplete="email"
+            />
+          </label>
+        ) : null}
+        {showBcc ? (
+          <label>
+            Bcc
+            <input
+              value={bcc}
+              onChange={(e) => onBcc(e.target.value)}
+              autoComplete="email"
+            />
+          </label>
+        ) : null}
+        {!showCc || !showBcc ? (
+          <div className="compose-copy">
+            {!showCc ? (
+              <button type="button" className="text-btn" onClick={() => setShowCc(true)}>
+                Cc
+              </button>
+            ) : null}
+            {!showBcc ? (
+              <button type="button" className="text-btn" onClick={() => setShowBcc(true)}>
+                Bcc
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         <label>
           Subject
           <input value={subject} onChange={(e) => onSubject(e.target.value)} />
@@ -221,7 +272,7 @@ export function Compose({
       {confirming ? (
         <ConfirmModal
           title="Send this letter?"
-          body={`It will go to ${to.trim()} via SMTP. Bateleur will not take it back.`}
+          body={`It will go to ${sendTargets(to, cc, bcc)} via SMTP. Bateleur will not take it back.`}
           confirmLabel="Send"
           busy={busy}
           onCancel={() => setConfirming(false)}
@@ -237,6 +288,13 @@ export function Compose({
 
 const MAX_FILES = 8;
 const MAX_BYTES = 8 * 1024 * 1024;
+
+function sendTargets(to: string, cc: string, bcc: string): string {
+  const parts = [`To ${to.trim()}`];
+  if (cc.trim()) parts.push(`Cc ${cc.trim()}`);
+  if (bcc.trim()) parts.push(`Bcc ${bcc.trim()}`);
+  return parts.join("; ");
+}
 
 async function addFiles(
   list: FileList,

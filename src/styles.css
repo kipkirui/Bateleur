@@ -1424,6 +1424,11 @@ kbd {
   padding: 8px 10px;
 }
 
+.compose-copy {
+  display: flex;
+  gap: 16px;
+}
+
 .settings select,
 .composer select {
   cursor: pointer;

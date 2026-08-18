@@ -64,6 +64,19 @@ export function replyAllTo(
   return people.join(", ");
 }
 
+export function replyAllParts(
+  message: { folder?: string; fromEmail?: string; toEmail?: string; ccEmail?: string },
+  own: Set<string>,
+): { to: string; cc: string } {
+  const to = replyTo(message, own);
+  const cc = replyAllTo(message, own)
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter((email) => email && email !== to.toLowerCase())
+    .join(", ");
+  return { to, cc };
+}
+
 export function hasReplyAll(
   message: { folder?: string; fromEmail?: string; toEmail?: string; ccEmail?: string },
   own: Set<string>,

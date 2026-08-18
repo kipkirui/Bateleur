@@ -160,6 +160,12 @@ pub struct SendDraft {
     pub html: Option<String>,
     #[serde(default)]
     pub attachments: Vec<DraftAttachment>,
+    #[serde(default)]
+    pub cc: String,
+    #[serde(default)]
+    pub bcc: String,
+    #[serde(default)]
+    pub in_reply_to: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

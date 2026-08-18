@@ -18,8 +18,8 @@ The inbox is not a prettier Gmail list. If you hire staff, a triage agent decide
 
 - Summarizer — blurb + keywords + optional visual deck
 - Drafts — reply/forward drafts only, never send
-- Triage (later) — front page vs back page
-- Scheduling (later) — meeting requests
+- Triage — front page vs back page, opt-in
+- Scheduling — Draft an RSVP on a Radar invite, opt-in; never a fake calendar
 
 Spend the model on what the user asked for. Cheap local classifiers can pre-filter; the LLM is not a firehose on every inbound message unless they opted into that. If staff can be wrong and you can see *why*, people will trust it.
 
@@ -73,15 +73,15 @@ One AI voice when staff is on: the Brief is editor-in-chief. Co-Pilot is the des
 
 ### Mail primitives (day one)
 
-Compose (Cmd+N), reply / reply-all / forward, unread / flag, attachments, account switcher, sync status, Magazine | Raw, keyboard j/k (move), e (archive), r (reply), c (compose), Cmd+K (search). If these are missing, it is not an Outlook-shaped client.
+Compose (Cmd+N), reply / reply-all / forward, unread / flag, attachments, account switcher, sync status, Magazine | Raw, keyboard j/k (move), e (archive), r (reply), a (reply all), f (forward), c (compose), Cmd+K (search). If these are missing, it is not an Outlook-shaped client.
 
 ### v1 vs later
 
 | Surface | v1 | Later |
 | --- | --- | --- |
-| Center | Action rows + reading cards; real subjects if no key | Synthesized headlines, Morning Brief |
-| Co-Pilot | Collapsed; summarize-this, draft-this | Stage queue; batch-on-sync if opted in |
-| Waiting-on | Manual flag | Nudges; still confirm before any send |
+| Center | Action rows + reading cards; real subjects if no key | Synthesized headlines |
+| Co-Pilot | Collapsed; summarize-this, draft-this, Morning Brief, triage | Stage queue; more batch-on-sync if opted in |
+| Waiting-on | Manual flag plus a four-day unanswered-sent nudge | Still confirm before any send |
 | Radar | Meeting invites that already arrived as mail | Calendar protocol (CalDAV / Google) — do not fake it |
 | Stories | Off, or on with pin / rename / merge | Auto-file with those overrides |
 
@@ -130,7 +130,7 @@ Sync stays dumb: fetch → parse → cache → render. Staff runs only for capab
               ▲                           │
               │                           ▼
 [ Per-account sync:              [ Staff, if activated + key ]
-   async-imap | async-pop ]         summarize | draft | later…
+   async-imap | async-pop ]         summarize | draft | triage | rsvp
               │                           │
               ▼                           ▼
        [ mail-parser ]     [ LLM adapter — BYOK ]

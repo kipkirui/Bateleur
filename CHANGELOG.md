@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.21.0] - 2026-08-18
+
+### Added
+
+- Compose has **Cc** and **Bcc** (hidden until you open them, or until Reply all / a mailto fills them). Reply all puts the correspondent on To and everyone else on Cc. A reply sets `In-Reply-To` and `References` from the original Message-ID so threads stay threaded. Bcc is envelope-only and is not written into Sent
+
 ## [0.20.1] - 2026-08-18
 
 ### Fixed

@@ -15,7 +15,7 @@ import { StaffModal } from "./components/StaffModal";
 import type { AccountDraft, DraftAttachment, FeedId, FlagChange, Mailbox, Message, ReaderMode, SendDraft, StaffBrief, StaffStatus, StoryOverride, SyncStatus } from "./types";
 import type { MailTo } from "./lib/links";
 import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
-import { fromMessage, forwardSubject, hasReplyAll, ownAddresses, replyAllTo, replySubject, replyTo, withQuote, type ComposeQuote } from "./lib/quote";
+import { fromMessage, forwardSubject, hasReplyAll, ownAddresses, replyAllParts, replySubject, replyTo, withQuote, type ComposeQuote } from "./lib/quote";
 import {
   bumpReceipt,
   formatReceipt,
@@ -68,11 +68,15 @@ export default function App() {
   const [briefBusy, setBriefBusy] = useState(false);
   const [briefError, setBriefError] = useState<string | null>(null);
   const [composeTo, setComposeTo] = useState("");
+  const [composeCc, setComposeCc] = useState("");
+  const [composeBcc, setComposeBcc] = useState("");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
   const [composeFromId, setComposeFromId] = useState("");
   const [composeFiles, setComposeFiles] = useState<DraftAttachment[]>([]);
   const [composeQuote, setComposeQuote] = useState<ComposeQuote | null>(null);
+  const [composeInReplyTo, setComposeInReplyTo] = useState<string | null>(null);
+  const [composeHeading, setComposeHeading] = useState("New letter");
   const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -98,6 +102,7 @@ export default function App() {
   const sendTimer = useRef(0);
   const pendingSend = useRef<SendDraft | null>(null);
   const pendingQuote = useRef<ComposeQuote | null>(null);
+  const pendingHeading = useRef("New letter");
   const flagUndo = useRef<FlagChange[] | null>(null);
   const undoKind = useRef<"archive" | "flag" | "send" | null>(null);
   const canUndoRef = useRef(canUndo);
@@ -348,44 +353,61 @@ export default function App() {
 
   const openMailTo = useCallback((mail: MailTo) => {
     setComposeTo(mail.to);
+    setComposeCc(mail.cc ?? "");
+    setComposeBcc(mail.bcc ?? "");
     setComposeSubject(mail.subject);
     setComposeBody(mail.body ? toEditorHtml(mail.body) : "");
     setComposeFromId(accountId ?? accounts[0]?.id ?? "");
     setComposeFiles([]);
     setComposeQuote(null);
+    setComposeInReplyTo(null);
+    setComposeHeading("New letter");
     setSendError(null);
     setOverlay("compose");
   }, [accountId, accounts]);
 
   const openCompose = useCallback((draft?: Partial<Message>, letter?: string) => {
     setComposeTo(draft ? replyTo(draft, ownMail) : "");
+    setComposeCc("");
+    setComposeBcc("");
     setComposeSubject(draft ? replySubject(draft.subject ?? "") : "");
     setComposeBody(letter ? toEditorHtml(letter) : "");
     setComposeQuote(draft ? fromMessage(draft) : null);
     setComposeFromId(draft?.accountId ?? accountId ?? accounts[0]?.id ?? "");
     setComposeFiles([]);
+    setComposeInReplyTo(draft?.rfcId ?? null);
+    setComposeHeading(draft ? "Reply" : "New letter");
     setSendError(null);
     setOverlay("compose");
   }, [accountId, accounts, ownMail]);
 
   const openReplyAll = useCallback((message: Message) => {
-    setComposeTo(replyAllTo(message, ownMail));
+    const parts = replyAllParts(message, ownMail);
+    setComposeTo(parts.to);
+    setComposeCc(parts.cc);
+    setComposeBcc("");
     setComposeSubject(replySubject(message.subject ?? ""));
     setComposeBody("");
     setComposeQuote(fromMessage(message));
     setComposeFromId(message.accountId ?? accountId ?? accounts[0]?.id ?? "");
     setComposeFiles([]);
+    setComposeInReplyTo(message.rfcId ?? null);
+    setComposeHeading("Reply all");
     setSendError(null);
     setOverlay("compose");
   }, [accountId, accounts, ownMail]);
 
   const openForward = useCallback((message: Message) => {
     setComposeTo("");
+    setComposeCc("");
+    setComposeBcc("");
     setComposeSubject(forwardSubject(message.subject ?? ""));
     setComposeBody("");
     setComposeQuote(fromMessage(message));
     setComposeFromId(message.accountId ?? accountId ?? accounts[0]?.id ?? "");
     setComposeFiles([]);
+    setComposeInReplyTo(null);
+    setComposeHeading("Forward");
     setSendError(null);
     setOverlay("compose");
     void loadComposeAttachments(message.id)
@@ -460,10 +482,13 @@ export default function App() {
     const draft: SendDraft = {
       accountId: from,
       to: composeTo,
+      cc: composeCc,
+      bcc: composeBcc,
       subject: composeSubject,
       body: readableText(composeBody),
       html: composeBody,
       attachments: composeFiles,
+      inReplyTo: composeInReplyTo,
       confirm: true,
     };
     setSendBusy(false);
@@ -471,14 +496,19 @@ export default function App() {
     await flushArchive();
     pendingSend.current = draft;
     pendingQuote.current = composeQuote;
+    pendingHeading.current = composeHeading;
     undoKind.current = "send";
     flagUndo.current = null;
     setOverlay("none");
     setComposeTo("");
+    setComposeCc("");
+    setComposeBcc("");
     setComposeSubject("");
     setComposeBody("");
     setComposeFiles([]);
     setComposeQuote(null);
+    setComposeInReplyTo(null);
+    setComposeHeading("New letter");
     setCanUndo(true);
     setToast("Sending");
     window.clearTimeout(sendTimer.current);
@@ -489,11 +519,15 @@ export default function App() {
 
   function restoreCompose(draft: SendDraft, quote: ComposeQuote | null = pendingQuote.current) {
     setComposeTo(draft.to);
+    setComposeCc(draft.cc ?? "");
+    setComposeBcc(draft.bcc ?? "");
     setComposeSubject(draft.subject);
     setComposeBody(draft.html || draft.body);
     setComposeFromId(draft.accountId);
     setComposeFiles(draft.attachments ?? []);
     setComposeQuote(quote);
+    setComposeInReplyTo(draft.inReplyTo ?? null);
+    setComposeHeading(pendingHeading.current);
     pendingQuote.current = null;
     setSendError(null);
     setOverlay("compose");
@@ -1325,13 +1359,18 @@ export default function App() {
 
       {overlay === "compose" ? (
         <Compose
+          heading={composeHeading}
           accounts={accounts}
           fromId={composeFromId || accounts[0]?.id || ""}
           onFrom={setComposeFromId}
           to={composeTo}
+          cc={composeCc}
+          bcc={composeBcc}
           subject={composeSubject}
           body={composeBody}
           onTo={setComposeTo}
+          onCc={setComposeCc}
+          onBcc={setComposeBcc}
           onSubject={setComposeSubject}
           onBody={setComposeBody}
           files={composeFiles}

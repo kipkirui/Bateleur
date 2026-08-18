@@ -1,8 +1,28 @@
 # Making Bateleur More Productive — and Less Boring
 
-*A writeup based on the current shipped state and roadmap in `STATUS.md` and `Make Email Great Again.md`.*
+*A writeup based on the product thesis. Updated 18 Aug 2026 against [`STATUS.md`](../../STATUS.md).*
 
-Bateleur's thesis is strong: local-first, BYOK, magazine-style reading, no dark patterns, no fake data. The risk with that thesis is that "calm and honest" quietly becomes "flat and forgettable." The two goals — more productive, less boring — aren't in tension; they're usually the same fix. A tool feels boring when it asks you to do manual work that software should be doing, and it feels productive when the software visibly does that work *for* you in a way you can see and trust. Below is a set of concrete directions, grouped by what they actually change for the user.
+Bateleur's thesis is strong: local-first, BYOK, magazine-style reading, no dark patterns, no fake data. The risk with that thesis is that "calm and honest" quietly becomes "flat and forgettable." The two goals — more productive, less boring — aren't in tension; they're usually the same fix. A tool feels boring when it asks you to do manual work that software should be doing, and it feels productive when the software visibly does that work *for* you in a way you can see and trust.
+
+Much of the original list below has shipped. Keep this note as design direction; do not treat unchecked history as the roadmap.
+
+## Now shipped
+
+Per-sender Reading lock (move twice), **Why here?**, magazine cover / briefing / Reading digest, story stacks (pin / rename / merge / not a story), session receipts, Awaiting reply, empty Action copy, Compose Focus, collapsed quote-reply, local snippets, Ctrl+K as search + commands, undo (`z`), multi-select (`x`), FTS5 search, unified vs per-account, Reply all / Forward, Cc / Bcc, Morning Brief (eight unread Action letters; a line leaves once you read it).
+
+## Still open
+
+- A quiet Uncertain tray for borderline classification
+- Extra paper stocks beyond day / night
+- Archive as a back-issues shelf (not a folder tree)
+- Highlights / clippings from selected text
+- Signed installers and auto-updater
+- Calendar protocol (CalDAV / Google) — Radar stays invites already in mail
+- Mobile shell (background IMAP and push)
+
+The Design section still stands as how Magazine should *feel*. Raw stays the MIME escape hatch.
+
+---
 
 ---
 
