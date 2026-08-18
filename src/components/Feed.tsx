@@ -13,12 +13,17 @@ type Props = {
   feed: FeedId;
   messages: Message[];
   selectedId: string | null;
+  checkedIds: Set<string>;
   onSelect: (id: string) => void;
+  onToggleCheck: (id: string) => void;
   onOpen: (id: string) => void;
   onArchive: (message: Message) => void;
   onReply: (message: Message) => void;
   onReading: (message: Message) => void;
   onSender: (message: Message) => void;
+  onBulkArchive: () => void;
+  onBulkFlag: () => void;
+  onClearChecked: () => void;
   emptyLabel: string;
 };
 
@@ -31,15 +36,21 @@ export function Feed({
   feed,
   messages,
   selectedId,
+  checkedIds,
   onSelect,
+  onToggleCheck,
   onOpen,
   onArchive,
   onReply,
   onReading,
   onSender,
+  onBulkArchive,
+  onBulkFlag,
+  onClearChecked,
   emptyLabel,
 }: Props) {
   const actionEmpty = feed === "action" && messages.length === 0 && !query.trim();
+  const checked = checkedIds.size;
 
   return (
     <section className="center">
@@ -62,6 +73,25 @@ export function Feed({
         </span>
       </div>
 
+      {checked > 0 ? (
+        <div className="bulk-bar">
+          <span>
+            {checked} selected · <kbd>x</kbd> toggle · <kbd>e</kbd> archive · <kbd>s</kbd> flag
+          </span>
+          <span className="card-actions">
+            <button type="button" className="text-btn" onClick={onBulkArchive}>
+              Archive
+            </button>
+            <button type="button" className="text-btn" onClick={onBulkFlag}>
+              Flag
+            </button>
+            <button type="button" className="text-btn" onClick={onClearChecked}>
+              Clear
+            </button>
+          </span>
+        </div>
+      ) : null}
+
       {actionEmpty ? (
         <div className="empty empty-clear">
           <p>Nothing needs you right now.</p>
@@ -73,12 +103,15 @@ export function Feed({
         <ul className="raw-list">
           {messages.map((message) => (
             <li key={message.id}>
-              <button
-                type="button"
-                className={selectedId === message.id ? "raw-row selected" : "raw-row"}
+              <div
+                className={`raw-row${selectedId === message.id ? " selected" : ""}${checkedIds.has(message.id) ? " checked" : ""}`}
                 onClick={() => onSelect(message.id)}
                 onDoubleClick={() => onOpen(message.id)}
               >
+                <Check
+                  on={checkedIds.has(message.id)}
+                  onToggle={() => onToggleCheck(message.id)}
+                />
                 <span className={message.unread ? "dot unread" : "dot"} />
                 <span className="raw-from">
                   {readableText(message.fromName)}
@@ -87,7 +120,7 @@ export function Feed({
                 <span className="raw-subject">{readableText(message.subject)}</span>
                 <span className="raw-preview">{readableText(message.preview)}</span>
                 <span className="raw-when">{formatWhen(message.receivedAt)}</span>
-              </button>
+              </div>
             </li>
           ))}
         </ul>
@@ -95,7 +128,9 @@ export function Feed({
         <ActionMagazine
           messages={messages}
           selectedId={selectedId}
+          checkedIds={checkedIds}
           onSelect={onSelect}
+          onToggleCheck={onToggleCheck}
           onOpen={onOpen}
           onArchive={onArchive}
           onReply={onReply}
@@ -110,7 +145,9 @@ export function Feed({
               key={message.id}
               message={message}
               selected={selectedId === message.id}
+              checked={checkedIds.has(message.id)}
               onSelect={onSelect}
+              onToggleCheck={onToggleCheck}
               onOpen={onOpen}
               onSender={onSender}
             />
@@ -124,7 +161,9 @@ export function Feed({
 function ActionMagazine({
   messages,
   selectedId,
+  checkedIds,
   onSelect,
+  onToggleCheck,
   onOpen,
   onArchive,
   onReply,
@@ -133,7 +172,9 @@ function ActionMagazine({
 }: {
   messages: Message[];
   selectedId: string | null;
+  checkedIds: Set<string>;
   onSelect: (id: string) => void;
+  onToggleCheck: (id: string) => void;
   onOpen: (id: string) => void;
   onArchive: (message: Message) => void;
   onReply: (message: Message) => void;
@@ -151,7 +192,9 @@ function ActionMagazine({
             message={lead}
             lead
             selected={selectedId === lead.id}
+            checked={checkedIds.has(lead.id)}
             onSelect={onSelect}
+            onToggleCheck={onToggleCheck}
             onOpen={onOpen}
             onArchive={onArchive}
             onReply={onReply}
@@ -168,7 +211,9 @@ function ActionMagazine({
               key={message.id}
               message={message}
               selected={selectedId === message.id}
+              checked={checkedIds.has(message.id)}
               onSelect={onSelect}
+              onToggleCheck={onToggleCheck}
               onOpen={onOpen}
               onArchive={onArchive}
               onReply={onReply}
@@ -186,7 +231,9 @@ function ActionCard({
   message,
   lead = false,
   selected,
+  checked,
   onSelect,
+  onToggleCheck,
   onOpen,
   onArchive,
   onReply,
@@ -196,7 +243,9 @@ function ActionCard({
   message: Message;
   lead?: boolean;
   selected: boolean;
+  checked: boolean;
   onSelect: (id: string) => void;
+  onToggleCheck: (id: string) => void;
   onOpen: (id: string) => void;
   onArchive: (message: Message) => void;
   onReply: (message: Message) => void;
@@ -212,25 +261,28 @@ function ActionCard({
 
   return (
     <article
-      className={`action-card${lead ? " lead" : ""}${selected ? " selected" : ""}`}
+      className={`action-card${lead ? " lead" : ""}${selected ? " selected" : ""}${checked ? " checked" : ""}`}
       onClick={() => onSelect(message.id)}
       onDoubleClick={() => onOpen(message.id)}
     >
       <div className="card-head">
-        <button
-          type="button"
-          className="sender-btn"
-          onClick={(e) => stop(e, () => onSender(message))}
-        >
-          <Avatar name={message.fromName} email={message.fromEmail} size={lead ? "lg" : "md"} />
-          <span>
-            <strong>
-              {readableText(message.fromName)}
-              {message.flagged ? <span className="flag-mark" title="Flagged" /> : null}
-            </strong>
-            <span className="card-when">{formatWhen(message.receivedAt)}</span>
-          </span>
-        </button>
+        <span className="card-who">
+          <Check on={checked} onToggle={() => onToggleCheck(message.id)} />
+          <button
+            type="button"
+            className="sender-btn"
+            onClick={(e) => stop(e, () => onSender(message))}
+          >
+            <Avatar name={message.fromName} email={message.fromEmail} size={lead ? "lg" : "md"} />
+            <span>
+              <strong>
+                {readableText(message.fromName)}
+                {message.flagged ? <span className="flag-mark" title="Flagged" /> : null}
+              </strong>
+              <span className="card-when">{formatWhen(message.receivedAt)}</span>
+            </span>
+          </button>
+        </span>
         {message.category ? <span className="badge">{message.category}</span> : null}
       </div>
       <h3 className={lead ? "card-hed" : "card-hed compact"}>{readableText(message.subject)}</h3>
@@ -260,22 +312,27 @@ function ActionCard({
 function ReadingRow({
   message,
   selected,
+  checked,
   onSelect,
+  onToggleCheck,
   onOpen,
   onSender,
 }: {
   message: Message;
   selected: boolean;
+  checked: boolean;
   onSelect: (id: string) => void;
+  onToggleCheck: (id: string) => void;
   onOpen: (id: string) => void;
   onSender: (message: Message) => void;
 }) {
   return (
     <div
-      className={selected ? "reading-row selected" : "reading-row"}
+      className={`reading-row${selected ? " selected" : ""}${checked ? " checked" : ""}`}
       onClick={() => onSelect(message.id)}
       onDoubleClick={() => onOpen(message.id)}
     >
+      <Check on={checked} onToggle={() => onToggleCheck(message.id)} />
       <Avatar name={message.fromName} email={message.fromEmail} size="sm" />
       <button type="button" className="sender-btn reading-from" onClick={(e) => {
         e.stopPropagation();
@@ -290,6 +347,21 @@ function ReadingRow({
       </span>
       <span className="reading-when">{formatWhen(message.receivedAt)}</span>
     </div>
+  );
+}
+
+function Check({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      className={on ? "check-mark on" : "check-mark"}
+      aria-pressed={on}
+      aria-label={on ? "Deselect" : "Select"}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+    />
   );
 }
 

@@ -291,7 +291,10 @@ kbd {
 
 .action-row.selected,
 .article.selected,
-.raw-row.selected {
+.raw-row.selected,
+.action-card.checked,
+.reading-row.checked,
+.raw-row.checked {
   background: var(--select);
 }
 
@@ -366,11 +369,12 @@ kbd {
 
 .raw-row {
   display: grid;
-  grid-template-columns: 14px 160px 220px 1fr 90px;
+  grid-template-columns: 18px 14px 160px 220px 1fr 90px;
   gap: 12px;
   align-items: center;
   padding: 9px 12px;
   font-size: 13px;
+  cursor: pointer;
 }
 
 .raw-from {
@@ -509,6 +513,39 @@ kbd {
   gap: 12px;
 }
 
+.card-who {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.check-mark {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-top: 4px;
+  padding: 0;
+  border: 1px solid var(--ink-soft);
+  border-radius: 2px;
+  background: transparent;
+}
+
+.check-mark.on {
+  background: var(--amber);
+  border-color: var(--amber);
+}
+
+.bulk-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 4px 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
 .card-when {
   display: block;
   font-size: 12px;
@@ -558,7 +595,7 @@ kbd {
 
 .reading-row {
   display: grid;
-  grid-template-columns: 22px 140px minmax(0, 1fr) 88px;
+  grid-template-columns: 18px 22px 140px minmax(0, 1fr) 88px;
   gap: 12px;
   align-items: center;
   width: 100%;
@@ -1218,6 +1255,26 @@ kbd {
   padding: 8px 14px;
   font-size: 13px;
   z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.toast kbd {
+  border-color: color-mix(in srgb, var(--paper) 40%, transparent);
+  color: var(--paper);
+}
+
+.toast-undo {
+  background: transparent;
+  border: 0;
+  color: var(--paper);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .rail,
@@ -1329,12 +1386,12 @@ kbd {
   }
 
   .raw-row {
-    grid-template-columns: 14px 1fr;
+    grid-template-columns: 18px 14px 1fr;
     grid-template-rows: auto auto;
   }
 
   .reading-row {
-    grid-template-columns: 22px minmax(0, 1fr);
+    grid-template-columns: 18px 22px minmax(0, 1fr);
   }
 
   .reading-from,

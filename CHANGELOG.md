@@ -8,6 +8,13 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.11.0] - 2026-08-18
+
+### Added
+
+- Undo (`z` or the toast) for archive, flag, unread, and send. Archive and send wait eight seconds so undo never has to recall a letter that already left
+- Multi-select: `x` or the checkbox, then bulk Archive / Flag / unread. Escape clears the selection
+
 ## [0.10.0] - 2026-08-18
 
 ### Added
