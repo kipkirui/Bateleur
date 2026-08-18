@@ -1,5 +1,8 @@
 use crate::attach::{self, StoredPart};
-use bateleur_core::{classify_mail, html_to_plain, preview_text, Hero, MailFolder, Message};
+use bateleur_core::{
+    classify_mail, html_to_plain, parse_ics, parse_ics_bytes, preview_text, with_calendar, Hero,
+    MailFolder, Message,
+};
 use mail_parser::{MessageParser, PartType};
 
 pub struct FetchResult {
@@ -22,7 +25,14 @@ pub fn from_rfc822(
     let subject = html_to_plain(parsed.subject().unwrap_or("(no subject)"));
     let (body, html_body) = bodies(&parsed);
     let preview = preview_text(&body, 180);
-    let class = classify_mail(&subject, &preview, &from_email);
+    let extracted = attach::extract(&parsed, id);
+    let attachments: Vec<_> = extracted.iter().map(|p| p.meta.clone()).collect();
+    let invite = extracted
+        .iter()
+        .find_map(|part| parse_ics_bytes(&part.bytes))
+        .or_else(|| parse_ics(&body));
+    let has_calendar = invite.is_some();
+    let class = with_calendar(classify_mail(&subject, &preview, &from_email), has_calendar);
     let feed = class.feed.to_string();
     let domain = from_email.split('@').nth(1).unwrap_or("mail");
     let hero = if feed == "reading" && folder == "inbox" {
@@ -33,8 +43,6 @@ pub fn from_rfc822(
     } else {
         None
     };
-    let extracted = attach::extract(&parsed, id);
-    let attachments = extracted.iter().map(|p| p.meta.clone()).collect();
     Some((
         Message {
             id: id.to_string(),
@@ -61,6 +69,7 @@ pub fn from_rfc822(
             to_email: address_emails(parsed.to()),
             rfc_id: clean_msgid(parsed.message_id()),
             in_reply_to: header_ids(parsed.in_reply_to()),
+            invite,
         },
         extracted,
     ))

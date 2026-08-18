@@ -35,6 +35,17 @@ export type Message = {
   toEmail?: string;
   rfcId?: string | null;
   inReplyTo?: string | null;
+  invite?: MeetingInvite | null;
+};
+
+export type MeetingInvite = {
+  method: string;
+  summary: string;
+  when: string;
+  startsAt?: string | null;
+  location?: string | null;
+  organizer?: string | null;
+  cancelled?: boolean;
 };
 
 export type Attachment = {
@@ -126,6 +137,7 @@ export type FeedId =
   | "action"
   | "reading"
   | "awaiting"
+  | "radar"
   | "sent"
   | "drafts"
   | "junk"
@@ -156,6 +168,7 @@ export type StaffStatus = {
   drafts: boolean;
   triage: boolean;
   triageNew: boolean;
+  schedule: boolean;
 };
 
 export type StaffHire = {
@@ -169,6 +182,7 @@ export type StaffHire = {
   drafts: boolean;
   triage: boolean;
   triageNew: boolean;
+  schedule: boolean;
 };
 
 export type StaffSummary = {

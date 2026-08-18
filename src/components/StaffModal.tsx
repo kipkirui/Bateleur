@@ -33,6 +33,7 @@ export function StaffModal({ onClose, onChange }: Props) {
   const [drafts, setDrafts] = useState(false);
   const [triage, setTriage] = useState(false);
   const [triageNew, setTriageNew] = useState(false);
+  const [schedule, setSchedule] = useState(false);
   const [hired, setHired] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +73,7 @@ export function StaffModal({ onClose, onChange }: Props) {
     setDrafts(status.drafts);
     setTriage(status.triage);
     setTriageNew(status.triageNew);
+    setSchedule(status.schedule);
     onChange(status);
   }
 
@@ -91,6 +93,7 @@ export function StaffModal({ onClose, onChange }: Props) {
         drafts,
         triage,
         triageNew,
+        schedule,
       });
       applyStatus(status);
       setApiKey("");
@@ -100,7 +103,8 @@ export function StaffModal({ onClose, onChange }: Props) {
           status.summarizeNew ||
           status.drafts ||
           status.triage ||
-          status.triageNew
+          status.triageNew ||
+          status.schedule
           ? "Staff is hired. Open a letter or write the Brief from the desk."
           : "Key stored. Turn on a capability to run.",
       );
@@ -233,6 +237,14 @@ export function StaffModal({ onClose, onChange }: Props) {
             onChange={(event) => setTriageNew(event.target.checked)}
           />
           Triage new mail (on sync)
+        </label>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={schedule}
+            onChange={(event) => setSchedule(event.target.checked)}
+          />
+          Draft an RSVP (never send)
         </label>
         {error ? <p className="muted staff-error">{error}</p> : null}
         {note ? <p className="muted">{note}</p> : null}

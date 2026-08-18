@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { draftReply, loadInlineParts, saveAttachment, staffLetter, summarizeMail, triageMail } from "../api";
+import { draftReply, draftRsvp, loadInlineParts, openInvite, saveAttachment, staffLetter, summarizeMail, triageMail } from "../api";
 import { hasRemoteImages, readableText, rewriteCidImages } from "../lib/emailHtml";
 import { formatWhen, lede, readingTime, sendFrequency } from "../lib/magazine";
 import { threadLetters } from "../lib/stories";
@@ -55,9 +55,10 @@ export function Reader({
   const [thisLetter, setThisLetter] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
+  const [inviteNote, setInviteNote] = useState<string | null>(null);
   const [summary, setSummary] = useState<StaffSummary | null>(null);
   const [savedDraft, setSavedDraft] = useState<string | null>(null);
-  const [staffBusy, setStaffBusy] = useState<"summarize" | "draft" | "triage" | null>(null);
+  const [staffBusy, setStaffBusy] = useState<"summarize" | "draft" | "triage" | "rsvp" | null>(null);
   const [staffError, setStaffError] = useState<string | null>(null);
   const quote = lede(message);
   const thread = threadLetters(mailbox, message, storyOverrides);
@@ -172,7 +173,31 @@ export function Reader({
     }
   }
 
-  const showStaff = staff.summarize || staff.drafts || staff.triage;
+  async function onOpenInvite() {
+    setInviteNote(null);
+    try {
+      await openInvite(message.id);
+    } catch (err) {
+      setInviteNote(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function onRsvp() {
+    setStaffBusy("rsvp");
+    setStaffError(null);
+    try {
+      const next = await draftRsvp(message.id);
+      setSavedDraft(next.body);
+      onDraft(next.body);
+    } catch (err) {
+      setStaffError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStaffBusy(null);
+    }
+  }
+
+  const showStaff = staff.summarize || staff.drafts || staff.triage || (staff.schedule && Boolean(message.invite));
+  const invite = message.invite;
 
   return (
     <div className="overlay" role="dialog" aria-modal="true">
@@ -204,6 +229,40 @@ export function Reader({
         <h1 className="article-hed">{readableText(message.subject)}</h1>
         <p className="read-time">{readingTime(message)}</p>
         {quote ? <blockquote className="lede-quote">{quote}</blockquote> : null}
+        {invite ? (
+          <aside className="radar-card">
+            <div className="rail-label">Radar</div>
+            <p className="radar-title">{invite.summary}</p>
+            <p className="radar-when">{invite.when}</p>
+            {invite.location ? <p className="muted">{invite.location}</p> : null}
+            {invite.organizer ? <p className="muted">{invite.organizer}</p> : null}
+            <div className="card-actions">
+              <button type="button" className="text-btn" onClick={() => void onOpenInvite()}>
+                Open in calendar
+              </button>
+              <button type="button" className="text-btn" onClick={onReply}>
+                Reply
+              </button>
+              {staff.schedule ? (
+                staff.hired ? (
+                  <button
+                    type="button"
+                    className="text-btn"
+                    disabled={staffBusy !== null}
+                    onClick={() => void onRsvp()}
+                  >
+                    {staffBusy === "rsvp" ? "Drafting…" : "Draft an RSVP"}
+                  </button>
+                ) : (
+                  <button type="button" className="text-btn" onClick={onHire}>
+                    Hire staff to RSVP
+                  </button>
+                )
+              ) : null}
+            </div>
+            {inviteNote ? <p className="muted">{inviteNote}</p> : null}
+          </aside>
+        ) : null}
         {showStaff ? (
           <aside className="staff-note">
             <div className="rail-label">Staff</div>

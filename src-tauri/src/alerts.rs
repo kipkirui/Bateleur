@@ -89,6 +89,7 @@ mod tests {
             to_email: String::new(),
             rfc_id: None,
             in_reply_to: None,
+            invite: None,
         }
     }
 

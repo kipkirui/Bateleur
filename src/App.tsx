@@ -62,6 +62,7 @@ export default function App() {
     drafts: false,
     triage: false,
     triageNew: false,
+    schedule: false,
   });
   const [brief, setBrief] = useState<StaffBrief | null>(null);
   const [briefBusy, setBriefBusy] = useState(false);
@@ -214,6 +215,16 @@ export default function App() {
         .map((item) => item.message)
         .filter((message) => !hiddenIds.has(message.id));
     }
+    if (feed === "radar") {
+      return inbox
+        .filter((m) => m.invite && m.folder !== "junk")
+        .slice()
+        .sort((a, b) => {
+          const left = a.invite?.startsAt ?? a.receivedAt;
+          const right = b.invite?.startsAt ?? b.receivedAt;
+          return left.localeCompare(right);
+        });
+    }
     return messages.filter((m) => {
       if (accountId && m.accountId !== accountId) return false;
       if (hiddenIds.has(m.id)) return false;
@@ -225,7 +236,7 @@ export default function App() {
       if (m.feed !== feed) return false;
       return true;
     });
-  }, [messages, accountId, feed, hiddenIds, awaiting, storyFilter, stories]);
+  }, [messages, accountId, feed, hiddenIds, awaiting, storyFilter, stories, inbox]);
 
   const digest = useMemo(() => {
     if (feed !== "action" || storyFilter) return [];
@@ -901,6 +912,8 @@ export default function App() {
               ? "Nothing in this folder."
               : feed === "awaiting"
                 ? "Nothing you're waiting on. Flag a letter to chase a reply, or a sent letter with no answer after four days shows up here."
+                : feed === "radar"
+                  ? "No meeting invites in this mailbox. Radar only lists calendar parts that already arrived as mail."
                 : feed === "action"
                   ? "Nothing needs you right now."
                   : "Nothing in this feed.";
@@ -911,6 +924,14 @@ export default function App() {
       label: awaiting.length > 0 ? `Awaiting reply (${awaiting.length})` : "Awaiting reply",
       run: () => {
         setFeed("awaiting");
+        setOverlay("none");
+      },
+    },
+    {
+      id: "radar",
+      label: "Radar",
+      run: () => {
+        setFeed("radar");
         setOverlay("none");
       },
     },
@@ -1097,6 +1118,7 @@ export default function App() {
         onFeed={setFeed}
         waiting={waitingFor(messages, accountId)}
         awaiting={awaiting.length}
+        radar={inbox.filter((m) => m.invite).length}
         sync={syncCaption(syncByAccount, accountId)}
         folders={mailbox?.folders ?? []}
         mode={mode}
@@ -1174,6 +1196,7 @@ export default function App() {
         summarizeAccount={staff.summarizeAccount}
         drafts={staff.drafts}
         triage={staff.triage}
+        schedule={staff.schedule}
         next={staff.hired ? nextAction : null}
         onOpenNext={() => {
           if (!nextAction) return;

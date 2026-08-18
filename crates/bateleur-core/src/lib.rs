@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 mod autoconfig;
+mod calendar;
 mod classify;
 mod folders;
 mod text;
 
 pub use autoconfig::{guess_servers, oauth_provider, ServerGuess};
-pub use classify::{classify_feed, classify_mail, keep_local_action, Classification};
+pub use calendar::{is_calendar, parse_ics, parse_ics_bytes, MeetingInvite};
+pub use classify::{classify_feed, classify_mail, keep_local_action, with_calendar, Classification};
 pub use folders::{classify_imap_folder, ClassifiedFolder};
 pub use text::{html_to_plain, preview_text};
 
@@ -83,6 +85,8 @@ pub struct Message {
     pub rfc_id: Option<String>,
     #[serde(default)]
     pub in_reply_to: Option<String>,
+    #[serde(default)]
+    pub invite: Option<MeetingInvite>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -146,6 +146,13 @@ export async function saveAttachment(id: string): Promise<string> {
   return invoke<string>("save_attachment", { id });
 }
 
+export async function openInvite(messageId: string): Promise<void> {
+  if (!isTauri()) {
+    throw new Error("Opening an invite needs the desktop app.");
+  }
+  await invoke("open_invite", { messageId });
+}
+
 export async function mailAlerts(): Promise<boolean> {
   if (!isTauri()) return true;
   return invoke<boolean>("mail_alerts");
@@ -196,6 +203,7 @@ const EMPTY_STAFF: StaffStatus = {
   drafts: false,
   triage: false,
   triageNew: false,
+  schedule: false,
 };
 
 export async function staffStatus(): Promise<StaffStatus> {
@@ -234,6 +242,13 @@ export async function draftReply(messageId: string): Promise<StaffDraft> {
     throw new Error("Drafts need the desktop app.");
   }
   return invoke<StaffDraft>("draft_reply", { messageId });
+}
+
+export async function draftRsvp(messageId: string): Promise<StaffDraft> {
+  if (!isTauri()) {
+    throw new Error("RSVPs need the desktop app.");
+  }
+  return invoke<StaffDraft>("draft_rsvp", { messageId });
 }
 
 export async function triageMail(messageId: string): Promise<StaffTriage> {

@@ -8,6 +8,13 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.19.0] - 2026-08-18
+
+### Added
+
+- **Radar** lists meeting invites that already arrived as mail (`text/calendar` / `.ics`). The reader shows when, where, and who; Open in calendar hands the file to the OS. There is no CalDAV and no empty fake calendar
+- Invites classify as Action. **Draft an RSVP** is an opt-in staff switch — it opens Compose and never sends
+
 ## [0.18.0] - 2026-08-18
 
 ### Added

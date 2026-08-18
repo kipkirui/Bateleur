@@ -1,5 +1,8 @@
 use crate::attach::StoredPart;
-use bateleur_core::{classify_mail, Account, Attachment, Hero, MailFolder, Mailbox, Message};
+use bateleur_core::{
+    classify_mail, keep_local_action, parse_ics, parse_ics_bytes, Account, Attachment, Hero,
+    MailFolder, Mailbox, Message,
+};
 use rusqlite::{params, Connection};
 use std::collections::{HashMap, HashSet};
 
@@ -171,9 +174,11 @@ pub fn load_mailbox(conn: &Connection) -> Result<Mailbox, String> {
         folders.push(row.map_err(err)?);
     }
 
+    let calendar = calendar_parts(conn)?;
     let prefs = sender_overrides(conn)?;
     for message in &mut messages {
         fill_class(message);
+        fill_invite(message, calendar.get(&message.id));
         if message.folder == "inbox" {
             if let Some(feed) = prefs.get(&message.from_email.to_lowercase()) {
                 if feed == "reading" {
@@ -198,15 +203,88 @@ const MESSAGE_SELECT: &str = "SELECT id, account_id, feed, from_name, from_email
          FROM messages";
 
 pub fn get_message(conn: &Connection, id: &str) -> Result<Message, String> {
-    conn.query_row(
-        &format!("{MESSAGE_SELECT} WHERE id = ?1"),
-        [id],
-        message_from_row,
-    )
-    .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => "That letter is not in the cache.".into(),
-        other => other.to_string(),
-    })
+    let mut message = conn
+        .query_row(
+            &format!("{MESSAGE_SELECT} WHERE id = ?1"),
+            [id],
+            message_from_row,
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => "That letter is not in the cache.".into(),
+            other => other.to_string(),
+        })?;
+    let bytes = calendar_bytes(conn, id)?;
+    fill_invite(&mut message, bytes.as_ref());
+    Ok(message)
+}
+
+pub fn calendar_bytes(conn: &Connection, message_id: &str) -> Result<Option<Vec<u8>>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT bytes FROM attachments
+             WHERE message_id = ?1 AND stored = 1 AND length(bytes) > 0
+               AND (lower(content_type) LIKE '%calendar%'
+                 OR lower(content_type) LIKE '%/ics%'
+                 OR lower(filename) LIKE '%.ics')
+             LIMIT 1",
+        )
+        .map_err(err)?;
+    match stmt.query_row([message_id], |row| row.get::<_, Vec<u8>>(0)) {
+        Ok(bytes) if !bytes.is_empty() => Ok(Some(bytes)),
+        Ok(_) | Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(other) => Err(other.to_string()),
+    }
+}
+
+fn calendar_parts(conn: &Connection) -> Result<HashMap<String, Vec<u8>>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT message_id, bytes FROM attachments
+             WHERE stored = 1 AND length(bytes) > 0
+               AND (lower(content_type) LIKE '%calendar%'
+                 OR lower(content_type) LIKE '%/ics%'
+                 OR lower(filename) LIKE '%.ics')",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, Vec<u8>>(1)?)))
+        .map_err(err)?;
+    let mut out = HashMap::new();
+    for row in rows {
+        let (id, bytes) = row.map_err(err)?;
+        out.entry(id).or_insert(bytes);
+    }
+    Ok(out)
+}
+
+fn fill_invite(message: &mut Message, bytes: Option<&Vec<u8>>) {
+    message.invite = bytes
+        .and_then(|raw| parse_ics_bytes(raw))
+        .or_else(|| {
+            if message.body.to_ascii_uppercase().contains("BEGIN:VCALENDAR") {
+                parse_ics(&message.body)
+            } else {
+                None
+            }
+        });
+    if message.invite.is_none() || message.folder == "junk" {
+        return;
+    }
+    if message
+        .why
+        .as_deref()
+        .is_some_and(|why| why.starts_with("Staff:") || why.starts_with("You moved this sender"))
+    {
+        return;
+    }
+    if keep_local_action(message.category.as_deref()) {
+        return;
+    }
+    message.feed = "action".into();
+    message.category = Some("Invite".into());
+    if message.why.is_none() || message.why.as_deref() == Some("No action phrase matched") {
+        message.why = Some("This letter includes a calendar invite.".into());
+    }
 }
 
 pub fn brief_candidates(
@@ -1116,9 +1194,10 @@ fn message_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
         why: row.get::<_, Option<String>>(17).ok().flatten(),
         to_email: row.get::<_, String>(18).unwrap_or_default(),
         rfc_id: row.get::<_, Option<String>>(19).ok().flatten(),
-        in_reply_to: row.get::<_, Option<String>>(20).ok().flatten(),
-    })
-}
+            in_reply_to: row.get::<_, Option<String>>(20).ok().flatten(),
+            invite: None,
+        })
+    }
 
 fn attachment_meta_from_row(
     row: &rusqlite::Row<'_>,

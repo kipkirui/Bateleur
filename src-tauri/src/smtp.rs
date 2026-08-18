@@ -98,6 +98,7 @@ pub fn send(account: &Account, password: &str, draft: &SendDraft) -> Result<(Mes
         to_email: to_line.to_ascii_lowercase(),
         rfc_id: None,
         in_reply_to: None,
+        invite: None,
     };
     Ok((message, rfc822, parts))
 }

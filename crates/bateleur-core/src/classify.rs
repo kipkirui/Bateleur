@@ -50,6 +50,11 @@ const RULES: &[Rule] = &[
         reason: "Contains an RSVP phrase",
     },
     Rule {
+        needles: &["invitation", "invited you", "calendar invite", "you have been invited"],
+        category: "Invite",
+        reason: "Contains a meeting-invite phrase",
+    },
+    Rule {
         needles: &["sign-off", "sign off"],
         category: "Sign-off",
         reason: "Contains a sign-off phrase",
@@ -95,6 +100,17 @@ pub fn keep_local_action(category: Option<&str>) -> bool {
     matches!(category, Some("2FA" | "Password" | "KYC"))
 }
 
+pub fn with_calendar(class: Classification, has_calendar: bool) -> Classification {
+    if !has_calendar || keep_local_action(class.category) {
+        return class;
+    }
+    Classification {
+        feed: "action",
+        category: Some("Invite"),
+        reason: "This letter includes a calendar invite",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,5 +141,15 @@ mod tests {
     fn invoice_can_be_retried() {
         assert!(!keep_local_action(Some("Invoice")));
         assert!(!keep_local_action(None));
+    }
+
+    #[test]
+    fn calendar_part_is_action_invite() {
+        let reading = classify_mail("Lunch", "See you there", "sam@x.test");
+        let class = with_calendar(reading, true);
+        assert_eq!(class.feed, "action");
+        assert_eq!(class.category, Some("Invite"));
+        let twofa = classify_mail("Your verification code", "Use 12", "a@b.test");
+        assert_eq!(with_calendar(twofa, true).category, Some("2FA"));
     }
 }

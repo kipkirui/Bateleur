@@ -1,4 +1,4 @@
-use bateleur_core::{Attachment, DraftAttachment};
+use bateleur_core::{is_calendar, Attachment, DraftAttachment};
 use base64::Engine;
 use mail_parser::MimeHeaders;
 use std::path::{Path, PathBuf};
@@ -57,6 +57,39 @@ pub fn extract(parsed: &mail_parser::Message<'_>, message_id: &str) -> Vec<Store
             bytes: if stored { bytes } else { Vec::new() },
         });
     }
+    for (index, part) in parsed.parts.iter().enumerate() {
+        if part.is_multipart() {
+            continue;
+        }
+        let content_type = content_type_of(part);
+        let filename = part
+            .attachment_name()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(ToString::to_string)
+            .unwrap_or_else(|| default_filename(index, &content_type, part.is_message()));
+        if !is_calendar(&content_type, &filename) {
+            continue;
+        }
+        let bytes = part.contents().to_vec();
+        if bytes.is_empty() || out.iter().any(|item| item.bytes == bytes) {
+            continue;
+        }
+        let stored = bytes.len() <= MAX_STORE_BYTES;
+        out.push(StoredPart {
+            message_id: message_id.to_string(),
+            meta: Attachment {
+                id: format!("{message_id}:cal:{index}"),
+                filename,
+                content_type,
+                size: bytes.len() as u64,
+                content_id: None,
+                inline: false,
+                stored,
+            },
+            bytes: if stored { bytes } else { Vec::new() },
+        });
+    }
     out
 }
 
@@ -110,6 +143,17 @@ pub fn save_to_downloads(filename: &str, bytes: &[u8]) -> Result<PathBuf, String
     std::fs::create_dir_all(&dir).map_err(|e| format!("Could not open Downloads ({e})"))?;
     let path = unique_path(&dir, &sanitize_filename(filename));
     std::fs::write(&path, bytes).map_err(|e| format!("Could not write the file ({e})"))?;
+    Ok(path)
+}
+
+pub fn save_to_temp(filename: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+    if bytes.is_empty() {
+        return Err("That invite was too large to cache.".into());
+    }
+    let dir = std::env::temp_dir().join("bateleur-radar");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Could not write a temp invite ({e})"))?;
+    let path = unique_path(&dir, &sanitize_filename(filename));
+    std::fs::write(&path, bytes).map_err(|e| format!("Could not write the invite ({e})"))?;
     Ok(path)
 }
 

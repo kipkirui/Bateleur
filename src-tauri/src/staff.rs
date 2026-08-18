@@ -32,6 +32,8 @@ pub struct StaffHire {
     pub triage: bool,
     #[serde(default)]
     pub triage_new: bool,
+    #[serde(default)]
+    pub schedule: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,6 +49,7 @@ pub struct StaffStatus {
     pub drafts: bool,
     pub triage: bool,
     pub triage_new: bool,
+    pub schedule: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,6 +109,7 @@ pub fn status(conn: &Connection) -> Result<StaffStatus, String> {
         drafts: db::pref_bool_or(conn, "staff_drafts", false)?,
         triage: db::pref_bool_or(conn, "staff_triage", false)?,
         triage_new: db::pref_bool_or(conn, "staff_triage_new", false)?,
+        schedule: db::pref_bool_or(conn, "staff_schedule", false)?,
     })
 }
 
@@ -149,6 +153,7 @@ pub fn save(conn: &Connection, hire: StaffHire) -> Result<StaffStatus, String> {
         "staff_triage_new",
         if hire.triage_new { "1" } else { "0" },
     )?;
+    db::set_pref(conn, "staff_schedule", if hire.schedule { "1" } else { "0" })?;
     status(conn)
 }
 
@@ -160,6 +165,7 @@ pub fn clear(conn: &Connection) -> Result<StaffStatus, String> {
     db::set_pref(conn, "staff_drafts", "0")?;
     db::set_pref(conn, "staff_triage", "0")?;
     db::set_pref(conn, "staff_triage_new", "0")?;
+    db::set_pref(conn, "staff_schedule", "0")?;
     status(conn)
 }
 
@@ -234,6 +240,19 @@ pub fn prepare_draft(conn: &Connection, message_id: &str) -> Result<(Runtime, Me
     )
 }
 
+pub fn prepare_rsvp(conn: &Connection, message_id: &str) -> Result<(Runtime, Message), String> {
+    let (runtime, message) = prepare(
+        conn,
+        message_id,
+        "staff_schedule",
+        "Turn on Draft an RSVP in Hire staff.",
+    )?;
+    if message.invite.is_none() {
+        return Err("That letter has no calendar invite to answer.".into());
+    }
+    Ok((runtime, message))
+}
+
 pub fn summarize(runtime: &Runtime, message: &Message) -> Result<StaffSummary, String> {
     let text = complete(
         runtime,
@@ -265,6 +284,17 @@ pub fn draft(runtime: &Runtime, message: &Message) -> Result<StaffDraft, String>
 
 pub fn store_draft(conn: &Connection, message_id: &str, draft: &StaffDraft) -> Result<(), String> {
     db::set_staff_note(conn, message_id, "draft", &draft.body, "")
+}
+
+pub fn rsvp(runtime: &Runtime, message: &Message) -> Result<StaffDraft, String> {
+    let text = complete(
+        runtime,
+        "You draft an RSVP on a local mail desk. Never send. Plain text only. No subject line. Do not introduce the draft. The editor still has to Send. Be concise. If the invite is cancelled, acknowledge that. Otherwise write a short accept unless the letter clearly cannot make it.",
+        &format!("{}\n\nWrite an RSVP.", letter_prompt(message)),
+    )?;
+    Ok(StaffDraft {
+        body: text.trim().to_string(),
+    })
 }
 
 const BRIEF_LIMIT: usize = 12;
@@ -573,12 +603,27 @@ fn letter_prompt(message: &Message) -> String {
     } else {
         message.body.as_str()
     };
-    format!(
+    let mut prompt = format!(
         "From: {}\nSubject: {}\n---\n{}",
         from,
         message.subject,
         clip_text(body, BODY_LIMIT)
-    )
+    );
+    if let Some(invite) = &message.invite {
+        prompt.push_str("\n\nMeeting invite:\n");
+        prompt.push_str(&format!("Title: {}\nWhen: {}\n", invite.summary, invite.when));
+        if let Some(location) = &invite.location {
+            prompt.push_str(&format!("Where: {location}\n"));
+        }
+        if let Some(organizer) = &invite.organizer {
+            prompt.push_str(&format!("Organizer: {organizer}\n"));
+        }
+        prompt.push_str(&format!("Method: {}\n", invite.method));
+        if invite.cancelled {
+            prompt.push_str("This invite is cancelled.\n");
+        }
+    }
+    prompt
 }
 
 fn complete(runtime: &Runtime, system: &str, user: &str) -> Result<String, String> {
@@ -1103,6 +1148,7 @@ mod tests {
             to_email: String::new(),
             rfc_id: None,
             in_reply_to: None,
+            invite: None,
         };
         let brief = parse_brief(
             r#"{"blurb":"Two letters need you.","items":[{"id":"m1","line":"Sam wants a look at Q3"},{"id":"nope","line":"ignore"}]}"#,

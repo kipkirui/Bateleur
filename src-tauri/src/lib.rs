@@ -538,6 +538,17 @@ fn save_attachment(state: State<AppState>, id: String) -> Result<String, String>
 }
 
 #[tauri::command]
+fn open_invite(state: State<AppState>, message_id: String) -> Result<(), String> {
+    let bytes = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::calendar_bytes(&conn, &message_id)?
+            .ok_or_else(|| "No calendar invite is cached on this letter.".to_string())?
+    };
+    let path = attach::save_to_temp("invite.ics", &bytes)?;
+    tauri_plugin_opener::open_path(&path, None::<&str>).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn remove_account(
     app: AppHandle,
     state: State<AppState>,
@@ -652,6 +663,25 @@ async fn draft_reply(
         staff::prepare_draft(&conn, &message_id)?
     };
     let draft = tauri::async_runtime::spawn_blocking(move || staff::draft(&runtime, &message))
+        .await
+        .map_err(|e| e.to_string())??;
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        staff::store_draft(&conn, &message_id, &draft)?;
+    }
+    Ok(draft)
+}
+
+#[tauri::command]
+async fn draft_rsvp(
+    state: State<'_, AppState>,
+    message_id: String,
+) -> Result<staff::StaffDraft, String> {
+    let (runtime, message) = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        staff::prepare_rsvp(&conn, &message_id)?
+    };
+    let draft = tauri::async_runtime::spawn_blocking(move || staff::rsvp(&runtime, &message))
         .await
         .map_err(|e| e.to_string())??;
     {
@@ -778,6 +808,7 @@ pub fn run() {
             archive_message,
             inline_parts,
             save_attachment,
+            open_invite,
             remove_account,
             mail_alerts,
             set_mail_alerts,
@@ -791,6 +822,7 @@ pub fn run() {
             staff_letter,
             summarize_mail,
             draft_reply,
+            draft_rsvp,
             triage_mail,
             staff_brief,
             summarize_account,

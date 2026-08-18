@@ -137,6 +137,41 @@ export function Feed({
               {receiptLine ?? "Action is clear. Reading is still there when you want it."}
             </p>
           </div>
+        ) : feed === "radar" ? (
+          messages.length === 0 ? (
+            <div className="empty">{emptyLabel}</div>
+          ) : (
+            <div className="magazine">
+              <div className="block">
+                <h2>Radar</h2>
+                <p className="muted await-lede">
+                  Meeting invites that already arrived as mail. There is no calendar behind this list.
+                </p>
+                <ul className="await-list">
+                  {messages.map((message) => (
+                    <li key={message.id}>
+                      <button
+                        type="button"
+                        className={`await-row${selectedId === message.id ? " selected" : ""}`}
+                        onClick={() => onSelect(message.id)}
+                        onDoubleClick={() => onOpen(message.id)}
+                      >
+                        <span className="await-who">
+                          {message.invite?.when ?? readableText(message.fromName)}
+                        </span>
+                        <span className="await-why">
+                          {message.invite?.summary ?? readableText(message.subject)}
+                        </span>
+                        <span className="await-subject">
+                          {message.invite?.location || readableText(message.fromName) || message.fromEmail}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )
         ) : feed === "awaiting" ? (
           awaiting.length === 0 ? (
             <div className="empty">{emptyLabel}</div>
@@ -639,6 +674,7 @@ function Check({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 function feedHeading(feed: FeedId): string {
   if (feed === "reading") return "Reading";
   if (feed === "awaiting") return "Awaiting reply";
+  if (feed === "radar") return "Radar";
   if (feed === "sent") return "Sent";
   if (feed === "drafts") return "Drafts";
   if (feed === "junk") return "Junk";

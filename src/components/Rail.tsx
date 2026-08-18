@@ -11,6 +11,7 @@ type Props = {
   onFeed: (feed: FeedId) => void;
   waiting: number;
   awaiting: number;
+  radar: number;
   folders: MailFolder[];
   mode: ReaderMode;
   onMode: (mode: ReaderMode) => void;
@@ -43,6 +44,7 @@ export function Rail({
   onFeed,
   waiting,
   awaiting,
+  radar,
   folders,
   mode,
   onMode,
@@ -89,6 +91,21 @@ export function Rail({
                 <span className="await-label">Awaiting a reply</span>
                 <span className="rail-stat-hint">
                   Their turn. Flagged to chase, or sent with no answer in four days.
+                </span>
+              </span>
+            </button>
+          ) : null}
+          {radar > 0 ? (
+            <button
+              type="button"
+              className={feed === "radar" ? "await-badge active" : "await-badge"}
+              onClick={() => onFeed(feed === "radar" ? "action" : "radar")}
+            >
+              <span className="await-count">{radar}</span>
+              <span className="await-copy">
+                <span className="await-label">Radar</span>
+                <span className="rail-stat-hint">
+                  Meeting invites already in this mailbox. Not a calendar.
                 </span>
               </span>
             </button>
