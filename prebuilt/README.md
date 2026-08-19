@@ -1,6 +1,7 @@
 # Prebuilt Windows drops
 
 Unsigned Windows builds so you can open Bateleur without Node or Rust.
+On GitHub, use the raw download links in [`README.md`](../README.md#try-it-windows).
 These are **not** Authenticode-signed. Windows SmartScreen and Defender may
 warn; that is expected until a code-signing certificate is in place.
 

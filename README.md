@@ -11,6 +11,8 @@
 <p align="center">
   <a href="https://x.com/twkip">Kipkirui on X</a>
   ·
+  <a href="./prebuilt/windows/Bateleur_0.27.4_x64_en-US.msi">Try Windows</a>
+  ·
   <a href="./LICENSE">MIT License</a>
   ·
   <a href="./STATUS.md">Status</a>
@@ -22,6 +24,18 @@ You are the editor, not the intern who has to read every raw wire. Invoices and 
 
 This is a universal IMAP/POP client, not a Gmail wrapper. Add any mailbox. Mail stays on your machine.
 
+## Try it (Windows)
+
+You do not need Node, Rust, or a compile. Unsigned 0.27.4 builds are in [`prebuilt/windows`](./prebuilt/windows).
+
+1. Download **[Bateleur_0.27.4_x64_en-US.msi](https://github.com/kipkirui/Bateleur/raw/main/prebuilt/windows/Bateleur_0.27.4_x64_en-US.msi)** (preferred) and open it.
+2. Windows SmartScreen / Defender may warn. These files are not Authenticode-signed; that is expected. Prefer the `.msi`. The NSIS [setup `.exe`](https://github.com/kipkirui/Bateleur/raw/main/prebuilt/windows/Bateleur_0.27.4_x64-setup.exe) is the one Defender often quarantines.
+3. Or run [Bateleur.exe](https://github.com/kipkirui/Bateleur/raw/main/prebuilt/windows/Bateleur.exe) if WebView2 is already installed (Windows 11 usually has it).
+
+Checksums: [`prebuilt/windows/SHA256SUMS`](./prebuilt/windows/SHA256SUMS). Details: [`prebuilt/README.md`](./prebuilt/README.md).
+
+macOS and Linux installers are not in this folder yet. Tag `vX.Y.Z` for GitHub Release builds, or [compile locally](#run-from-source).
+
 ## Status
 
 Early (0.27.4). You can add an IMAP or POP mailbox (app password or Sign in with Google / Microsoft), sync INBOX / Sent / Drafts / Junk (IMAP), read HTML mail as designed, send through SMTP after a second confirm (IMAP APPENDs a copy to Sent), archive / unread / flag, reply-all, forward, and open or attach files. Remote images stay off until you load them. IMAP inboxes are watched with IDLE; POP is polled. New unread mail can raise an OS toast. Magazine view uses a cover, briefing, and article teasers, and stacks same-subject threads. With staff hired you can pin, rename, merge, or mark a stack not a story; the rail lists those stories. Raw is the dense table. **Back issues** is archived mail by month. **All mailboxes** mixes every account in the current feed; tap one mailbox to isolate it. Paper is cream, newsprint, sepia, or night. Compose can go full-page (Focus); reply quotes sit collapsed under the letter; `::` / `/` snippets are local. Archive, flag, and send undo with `z`. `x` multi-selects. Ctrl+K searches indexed mail and runs commands. Clearing Action shows what you did today. An **Awaiting reply** badge lists open loops (flagged, or sent with no answer after four days). **Uncertain** holds weak classifier matches until you put them on Action or Reading. **Radar** lists meeting invites already in mail (ICS) — Open in calendar hands the file to the OS; there is no CalDAV. Select text in a letter and **Keep** it; **Clippings** is a local list (rail, Ctrl+K), not a notes app. The Co-Pilot tab is **Next** when unread Action (or an awaiting loop) is waiting — Open, Reply, Draft a reply; it never auto-opens and never sends. Hire staff stores a BYOK key in the OS keychain; summarize-this, draft-this, triage, and **Draft an RSVP** run from the reader when those switches are on. Triage can move a letter between Action and Reading; **Triage new mail** can do that after sync, off until you turn it on. **Summarize this account** writes a Morning Brief from unread Action (up to eight letters; a line leaves once you read it). **Summarize all new mail** can blurbs new inbox letters after sync, off until you turn it on. Drafts open in Compose and never send on their own.
@@ -29,18 +43,6 @@ Early (0.27.4). You can add an IMAP or POP mailbox (app password or Sign in with
 Living checklist: [`STATUS.md`](./STATUS.md).  
 Product thesis: [`Make Email Great Again.md`](./Make%20Email%20Great%20Again.md).
 Released versions: [`CHANGELOG.md`](./CHANGELOG.md).
-
-## Try it (Windows)
-
-You do not need to compile. Unsigned 0.27.4 builds are in [`prebuilt/windows`](./prebuilt/windows):
-
-1. Download **[`Bateleur_0.27.4_x64_en-US.msi`](./prebuilt/windows/Bateleur_0.27.4_x64_en-US.msi)** (preferred) and open it.
-2. Windows SmartScreen / Defender may warn. These files are not Authenticode-signed; that is expected. Prefer the `.msi`. The NSIS [`-setup.exe`](./prebuilt/windows/Bateleur_0.27.4_x64-setup.exe) is the one Defender often quarantines.
-3. Or run [`Bateleur.exe`](./prebuilt/windows/Bateleur.exe) if WebView2 is already installed (Windows 11 usually has it).
-
-Checksums: [`prebuilt/windows/SHA256SUMS`](./prebuilt/windows/SHA256SUMS). Details: [`prebuilt/README.md`](./prebuilt/README.md).
-
-macOS and Linux installers are not in this folder yet. Tag `vX.Y.Z` for GitHub Release builds, or compile locally below.
 
 ## Stack
 

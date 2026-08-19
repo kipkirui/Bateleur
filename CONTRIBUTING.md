@@ -19,8 +19,11 @@ By contributing you agree that your work is licensed under the MIT License
 
 ## Setup
 
-You need Node.js 22+, Rust (stable), and the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/)
-for your OS.
+Windows testers who only want to open the app can skip this section and use
+[`prebuilt/windows`](./prebuilt/windows) — see [`README.md`](./README.md#try-it-windows).
+
+To work on the code you need Node.js 22+, Rust (stable), and the
+[Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS.
 
 ```bash
 npm install
@@ -37,6 +40,7 @@ npm run tauri dev
 | `src-tauri/` | Tauri shell, IMAP, POP, SMTP, SQLite, keychain |
 | `crates/bateleur-core/` | Shared types and text helpers (desktop + future mobile) |
 | `src/styles.css` | Design tokens |
+| `prebuilt/windows/` | Unsigned Windows MSI, NSIS setup, and portable exe for testers |
 
 ## Pull requests
 

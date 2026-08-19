@@ -39,7 +39,7 @@ These are required before Bateleur is an Outlook-shaped client, not a reader.
 
 ## Pending — platform
 
-- Apple notarization and Windows Authenticode (need a Developer ID / code-signing certificate). Unsigned installers still build from a `v*` tag
+- Apple notarization and Windows Authenticode (need a Developer ID / code-signing certificate). Unsigned Windows drops for testers are in [`prebuilt/windows`](./prebuilt/windows); a `v*` tag still builds unsigned installers until those certs exist
 - Mobile shell (`tauri android/ios init`); hard parts are background IMAP and push
 - Calendar protocol (CalDAV / Google) — do not fake a full calendar from nothing; Radar is invites already in mail
 

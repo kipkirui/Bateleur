@@ -12,7 +12,7 @@ are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 
 ### Added
 
-- Unsigned Windows `.msi`, NSIS setup, and a portable `Bateleur.exe` in [`prebuilt/windows`](./prebuilt/windows) so testers can open the app without compiling. Not Authenticode-signed; prefer the `.msi`
+- Unsigned Windows `.msi`, NSIS setup, and a portable `Bateleur.exe` in [`prebuilt/windows`](./prebuilt/windows) so testers can open the app without compiling. Not Authenticode-signed; prefer the `.msi`. README **Try Windows** links straight to the downloads
 
 ### Fixed
 

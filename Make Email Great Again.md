@@ -118,7 +118,7 @@ IMAP is the default sync path. POP is a first-class ingest option. After the mes
 
 Sync stays dumb: fetch → parse → cache → render. Staff runs only for capabilities the user has activated, with their key, against their chosen provider. Outputs write back to SQLite so the UI stays instant and the paper trail is local.
 
-**Distribution:** Tauri signed installers per platform (`.dmg`, `.msi`, AppImage/`.deb`) plus built-in auto-updater. Same Rust core can later ship as iOS/Android via Tauri 2 mobile (`tauri ios init` / `tauri android init`) — not a rewrite.
+**Distribution:** Tauri signed installers per platform (`.dmg`, `.msi`, AppImage/`.deb`) plus built-in auto-updater. Until OS signatures land, unsigned Windows MSI / NSIS setup / portable exe live in `prebuilt/windows` so testers can open the app without compiling. Same Rust core can later ship as iOS/Android via Tauri 2 mobile (`tauri ios init` / `tauri android init`) — not a rewrite.
 
 ## How the pieces stack
 

@@ -6,7 +6,9 @@ credential and mail-handling bugs as security issues.
 
 ## Supported versions
 
-This project is pre-1.0. Report issues against the default branch.
+This project is pre-1.0. Report issues against the default branch, or against
+an unsigned Windows drop in [`prebuilt/windows`](./prebuilt/windows) (version is
+in the installer filename and [`CHANGELOG.md`](./CHANGELOG.md)).
 
 ## What to report
 

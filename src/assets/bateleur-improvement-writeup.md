@@ -12,7 +12,7 @@ Per-sender Reading lock (move twice), **Why here?**, magazine cover / briefing /
 
 ## Still open
 
-- Signed installers and auto-updater (in-app check + GitHub Releases; Apple/Windows OS signatures still need certs)
+- OS-signed installers (Apple notarization / Windows Authenticode still need certs). Unsigned Windows MSI, NSIS setup, and a portable exe are in `prebuilt/windows`. Auto-updater checks GitHub Releases
 - Calendar protocol (CalDAV / Google) — Radar stays invites already in mail
 - Mobile shell (background IMAP and push)
 
@@ -80,7 +80,7 @@ Shipped keybinds (j/k, Enter, r, c, e, u, s, Ctrl+K, Esc) are a solid Vim-adjace
 
 This isn't about boring vs. exciting, but it's the precondition for anyone experiencing the exciting parts at all:
 
-- **Signed installers + auto-updater** — already flagged as pending, correctly. Nothing above matters if the only way to run the app is `npm run tauri dev`.
+- **Signed installers + auto-updater** — unsigned Windows drops are in `prebuilt/windows`; Authenticode and Apple notarization still need certs. Auto-updater is wired to GitHub Releases.
 - **Search backend (SQLite FTS5)** — Ctrl+K is bound but no indexed full-text search is listed as shipped. This will be the first thing a daily-driver user hits a wall on.
 - **Second-account UX decision** (unified vs. per-account) — also already flagged. Worth doing before Stories/BYOK, since most people who'd love a magazine-style client are exactly the people juggling 2–3 inboxes.
 

@@ -28,6 +28,24 @@ body:
       placeholder: Windows 11, macOS 15, …
     validations:
       required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you ran it
+      options:
+        - Windows MSI (prebuilt/windows)
+        - Windows NSIS setup.exe (prebuilt/windows)
+        - Portable Bateleur.exe (prebuilt/windows)
+        - Compiled from source (tauri dev / bundle)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Installer filename (e.g. 0.27.4) or git commit.
+      placeholder: 0.27.4
   - type: textarea
     id: extra
     attributes:
