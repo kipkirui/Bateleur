@@ -30,6 +30,18 @@ Living checklist: [`STATUS.md`](./STATUS.md).
 Product thesis: [`Make Email Great Again.md`](./Make%20Email%20Great%20Again.md).
 Released versions: [`CHANGELOG.md`](./CHANGELOG.md).
 
+## Try it (Windows)
+
+You do not need to compile. Unsigned 0.27.4 builds are in [`prebuilt/windows`](./prebuilt/windows):
+
+1. Download **[`Bateleur_0.27.4_x64_en-US.msi`](./prebuilt/windows/Bateleur_0.27.4_x64_en-US.msi)** (preferred) and open it.
+2. Windows SmartScreen / Defender may warn. These files are not Authenticode-signed; that is expected. Prefer the `.msi`. The NSIS [`-setup.exe`](./prebuilt/windows/Bateleur_0.27.4_x64-setup.exe) is the one Defender often quarantines.
+3. Or run [`Bateleur.exe`](./prebuilt/windows/Bateleur.exe) if WebView2 is already installed (Windows 11 usually has it).
+
+Checksums: [`prebuilt/windows/SHA256SUMS`](./prebuilt/windows/SHA256SUMS). Details: [`prebuilt/README.md`](./prebuilt/README.md).
+
+macOS and Linux installers are not in this folder yet. Tag `vX.Y.Z` for GitHub Release builds, or compile locally below.
+
 ## Stack
 
 - **UI:** React + TypeScript (Vite)
@@ -38,11 +50,11 @@ Released versions: [`CHANGELOG.md`](./CHANGELOG.md).
 - **Mail:** IMAP and POP over rustls, SMTP via lettre, SQLite cache, OS keychain for passwords and the staff key
 - **Design:** CSS tokens in `src/styles.css` — cream, newsprint, sepia, and night paper
 
-## Run
+## Run from source
 
 You need Node.js 22+, Rust (stable), and the [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS.
 
-Desktop app (needed for real mail):
+Desktop app (needed for real mail if you are not using a prebuilt):
 
 ```bash
 npm install

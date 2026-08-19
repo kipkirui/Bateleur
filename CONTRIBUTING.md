@@ -45,7 +45,8 @@ npm run tauri dev
 3. Update `STATUS.md` when you ship or cut a surface.
 4. Bump the version and add a `CHANGELOG.md` entry (see Versioning below).
 5. Do not commit `node_modules`, `src-tauri/target`, `.env`, or mail databases.
-6. Do not add sample / fixture mailboxes or fake “waiting-on” copy.
+6. Unsigned Windows test drops belong in `prebuilt/windows/` (see [`prebuilt/README.md`](./prebuilt/README.md)). Refresh those files when testers should try a new drop without compiling.
+7. Do not add sample / fixture mailboxes or fake “waiting-on” copy.
 
 ## Versioning
 
@@ -77,15 +78,18 @@ Optional:
 - `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` — Developer ID + notarization
 - A Windows Authenticode / Azure Trusted Signing cert when you have one
 
-Local installer (needs the private key in the environment):
+Local installer (needs the updater private key in the environment):
 
-```bash
+```powershell
 $env:TAURI_SIGNING_PRIVATE_KEY_PATH = "$PWD\.tauri\bateleur.key"
+$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content -Raw "$PWD\.tauri\bateleur.key"
 $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
 npm run bundle
 ```
 
-On Windows, hand testers the `.msi` first. Unsigned NSIS setup `.exe` files are the ones Defender quarantines. Authenticode (a code-signing certificate) is what actually clears SmartScreen.
+On Windows, hand testers the `.msi` first (also in `prebuilt/windows`). Unsigned NSIS setup `.exe` files are the ones Defender quarantines. Authenticode (a code-signing certificate) is what actually clears SmartScreen.
+
+Local `npm run bundle` also needs `TAURI_SIGNING_PRIVATE_KEY` set to the key file contents if updater artifacts are on. The OS installers still build unsigned without Authenticode.
 
 If you lose the updater private key, already-installed apps cannot verify new updates. Generate a new pair with `npx tauri signer generate --ci -w .tauri/bateleur.key` and put the new public key in `src-tauri/tauri.conf.json`.
 

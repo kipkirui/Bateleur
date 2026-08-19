@@ -10,6 +10,10 @@ are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 
 ## [0.27.4] - 2026-08-19
 
+### Added
+
+- Unsigned Windows `.msi`, NSIS setup, and a portable `Bateleur.exe` in [`prebuilt/windows`](./prebuilt/windows) so testers can open the app without compiling. Not Authenticode-signed; prefer the `.msi`
+
 ### Fixed
 
 - Wheel over an HTML letter no longer dies after the mailbox refreshes in the background. The overlay keeps scrolling; newsletter CSS cannot trap the wheel inside the iframe, and iframe height stays put while you are scrolling
