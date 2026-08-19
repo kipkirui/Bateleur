@@ -8,6 +8,16 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.27.1] - 2026-08-19
+
+### Changed
+
+- App and installer icons are the logo mark on cream paper, not a black or transparent tile (Windows paints transparency as a hole). The NSIS installer uses that icon. WebView2 is embedded in the installer instead of downloaded at setup
+
+### Fixed
+
+- Unsigned Windows builds are still going to trip Defender. Prefer the `.msi` for testers; Authenticode is what actually clears SmartScreen
+
 ## [0.27.0] - 2026-08-19
 
 ### Added

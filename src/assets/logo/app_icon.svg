@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" fill="#000000"/>
+  <!-- OS tile: cream paper, not transparent. Windows paints alpha as black. -->
+  <rect width="1024" height="1024" fill="#FDFBF7"/>
   <defs>
     <linearGradient id="envelope" x1="2" y1="4.16" x2="22" y2="22" gradientUnits="userSpaceOnUse">
       <stop stop-color="#A92580"/>

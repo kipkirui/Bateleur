@@ -81,8 +81,11 @@ Local installer (needs the private key in the environment):
 
 ```bash
 $env:TAURI_SIGNING_PRIVATE_KEY_PATH = "$PWD\.tauri\bateleur.key"
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
 npm run bundle
 ```
+
+On Windows, hand testers the `.msi` first. Unsigned NSIS setup `.exe` files are the ones Defender quarantines. Authenticode (a code-signing certificate) is what actually clears SmartScreen.
 
 If you lose the updater private key, already-installed apps cannot verify new updates. Generate a new pair with `npx tauri signer generate --ci -w .tauri/bateleur.key` and put the new public key in `src-tauri/tauri.conf.json`.
 
