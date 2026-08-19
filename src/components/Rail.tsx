@@ -21,7 +21,6 @@ type Props = {
   mode: ReaderMode;
   onMode: (mode: ReaderMode) => void;
   onCompose: () => void;
-  onSettings: () => void;
   paper: PaperStock;
   onPaper: (stock: PaperStock) => void;
   sync: { label: string; hint: string } | null;
@@ -59,7 +58,6 @@ export function Rail({
   mode,
   onMode,
   onCompose,
-  onSettings,
   paper,
   onPaper,
   sync,
@@ -178,6 +176,7 @@ export function Rail({
         <kbd>N</kbd>
       </button>
 
+      <div className="rail-scroll">
       <div className="rail-label">Accounts</div>
       <button
         type="button"
@@ -266,9 +265,9 @@ export function Rail({
             </button>
           );
         })}
+      </div>
 
-      <div className="rail-spacer" />
-
+      <div className="rail-dock">
       <div className="rail-label">View</div>
       <div className="mode-switch">
         <button
@@ -299,9 +298,7 @@ export function Rail({
           </button>
         ))}
       </div>
-      <button type="button" className="nav" onClick={onSettings}>
-        Settings
-      </button>
+      </div>
     </aside>
   );
 }

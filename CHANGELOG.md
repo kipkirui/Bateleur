@@ -8,6 +8,24 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.27.4] - 2026-08-19
+
+### Fixed
+
+- Wheel over an HTML letter no longer dies after the mailbox refreshes in the background. The overlay keeps scrolling; newsletter CSS cannot trap the wheel inside the iframe, and iframe height stays put while you are scrolling
+
+## [0.27.3] - 2026-08-19
+
+### Changed
+
+- Settings is a vertical tab at the bottom of the right rail, under Hire staff / Next / Staff, pinned inside the window so the default size does not clip it. Magazine / Raw and paper stay on the left
+
+## [0.27.2] - 2026-08-19
+
+### Fixed
+
+- Magazine / Raw, paper stocks, and Settings stay pinned at the bottom of the left rail. Accounts and folders scroll above them, so you do not need a maximized window to reach Settings
+
 ## [0.27.1] - 2026-08-19
 
 ### Changed

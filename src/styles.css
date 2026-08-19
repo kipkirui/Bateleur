@@ -127,6 +127,28 @@ kbd {
   overflow-y: auto;
 }
 
+.rail {
+  overflow: hidden;
+}
+
+.rail-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rail-dock {
+  flex: 0 0 auto;
+  margin: 8px -4px 0;
+  padding: 10px 4px 0;
+  border-top: 1px solid var(--rule);
+  background: var(--paper-2);
+}
+
 .desk {
   border-right: none;
   border-left: 1px solid var(--rule);
@@ -284,8 +306,7 @@ kbd {
 }
 
 .rail-spacer {
-  flex: 1 1 auto;
-  min-height: 12px;
+  display: none;
 }
 
 .mode-switch {
@@ -1302,8 +1323,11 @@ kbd {
 }
 
 .desk.collapsed {
+  position: relative;
   padding: 0;
-  align-items: stretch;
+  overflow: clip;
+  min-height: 0;
+  height: 100%;
 }
 
 .desk-tab {
@@ -1316,6 +1340,29 @@ kbd {
   font-size: 11px;
   color: var(--amber);
   width: 100%;
+  padding: 12px 0;
+}
+
+.desk.collapsed .desk-tab {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: max-content;
+  max-height: calc(50% - 8px);
+}
+
+.desk.collapsed .desk-tab-staff {
+  top: 10px;
+}
+
+.desk.collapsed .desk-tab-settings {
+  top: auto;
+  bottom: 10px;
+}
+
+.desk-settings {
+  margin-top: auto;
 }
 
 .desk-head {
@@ -1467,6 +1514,7 @@ kbd {
   overflow-y: auto;
   overscroll-behavior: none;
   overflow-anchor: none;
+  scrollbar-gutter: stable;
 }
 
 .reader-wide {
@@ -2048,6 +2096,7 @@ kbd {
 }
 
 .rail,
+.rail-scroll,
 .desk,
 .feed-scroll,
 .settings {
@@ -2056,6 +2105,7 @@ kbd {
 }
 
 .rail:hover,
+.rail-scroll:hover,
 .desk:hover,
 .feed-scroll:hover,
 .settings:hover {
@@ -2063,6 +2113,7 @@ kbd {
 }
 
 .rail::-webkit-scrollbar,
+.rail-scroll::-webkit-scrollbar,
 .desk::-webkit-scrollbar,
 .feed-scroll::-webkit-scrollbar,
 .settings::-webkit-scrollbar {
@@ -2070,6 +2121,7 @@ kbd {
 }
 
 .rail::-webkit-scrollbar-track,
+.rail-scroll::-webkit-scrollbar-track,
 .desk::-webkit-scrollbar-track,
 .feed-scroll::-webkit-scrollbar-track,
 .settings::-webkit-scrollbar-track {
@@ -2077,6 +2129,7 @@ kbd {
 }
 
 .rail::-webkit-scrollbar-thumb,
+.rail-scroll::-webkit-scrollbar-thumb,
 .desk::-webkit-scrollbar-thumb,
 .feed-scroll::-webkit-scrollbar-thumb,
 .settings::-webkit-scrollbar-thumb {
@@ -2085,6 +2138,7 @@ kbd {
 }
 
 .rail:hover::-webkit-scrollbar-thumb,
+.rail-scroll:hover::-webkit-scrollbar-thumb,
 .desk:hover::-webkit-scrollbar-thumb,
 .feed-scroll:hover::-webkit-scrollbar-thumb,
 .settings:hover::-webkit-scrollbar-thumb {
@@ -2123,6 +2177,11 @@ kbd {
     display: none;
   }
 
+  .rail-scroll,
+  .rail-dock {
+    display: contents;
+  }
+
   .nav {
     width: auto;
   }
@@ -2135,12 +2194,24 @@ kbd {
 
   .desk.collapsed {
     max-height: 44px;
+    flex-direction: row;
   }
 
-  .desk-tab {
+  .desk.collapsed .desk-tab {
+    position: static;
     writing-mode: horizontal-tb;
     transform: none;
     letter-spacing: 0.12em;
+    padding: 0 12px;
+    height: 100%;
+    max-height: none;
+    flex: 1 1 auto;
+  }
+
+  .desk.collapsed .desk-tab-staff,
+  .desk.collapsed .desk-tab-settings {
+    top: auto;
+    bottom: auto;
   }
 
   .cover-hed {

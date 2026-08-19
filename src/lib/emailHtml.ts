@@ -293,6 +293,11 @@ function wrapEmailDocument(cssParts: string[], body: string): string {
     ${author}
     <style>
       html { color-scheme: light !important; }
+      html, body {
+        overflow: hidden !important;
+        overflow-anchor: none !important;
+        overscroll-behavior: none !important;
+      }
     </style>
   </head>
   <body>${body}</body>

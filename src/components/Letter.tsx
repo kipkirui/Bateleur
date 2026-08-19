@@ -96,16 +96,24 @@ function HtmlLetter({
   onQuote?: (quote: string | null) => void;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const onMailToRef = useRef(onMailTo);
+  const onQuoteRef = useRef(onQuote);
+  onMailToRef.current = onMailTo;
+  onQuoteRef.current = onQuote;
   const srcdoc = sanitizeEmailHtml(html, remoteImages);
 
   useEffect(() => {
     const node = frameRef.current;
     if (!node) return;
     const iframe: HTMLIFrameElement = node;
+    let cleanup: (() => void) | undefined;
+    let scrollIdle = 0;
 
     function bind() {
       const doc = iframe.contentDocument;
       if (!doc) return;
+      cleanup?.();
+
       const onClick = (event: globalThis.MouseEvent) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
@@ -115,22 +123,72 @@ function HtmlLetter({
         if (!href || href.startsWith("#")) return;
         event.preventDefault();
         event.stopPropagation();
-        void handleHref(href, onMailTo);
+        void handleHref(href, onMailToRef.current);
       };
-      doc.addEventListener("click", onClick, true);
       const onSelect = () => {
-        onQuote?.(readQuote(doc));
+        onQuoteRef.current?.(readQuote(doc));
       };
-      doc.addEventListener("mouseup", onSelect);
-      doc.addEventListener("keyup", onSelect);
       const onDragStart = (event: DragEvent) => {
         if (event.target instanceof HTMLImageElement) event.preventDefault();
       };
-      doc.addEventListener("dragstart", onDragStart);
-      const onWheel = (event: WheelEvent) => {
-        scrollReader(iframe, event.deltaX, event.deltaY, event.deltaMode);
-        event.preventDefault();
+
+      let last = 0;
+      let frame = 0;
+      let held = false;
+      let scrolling = false;
+      let pendingX = 0;
+      let pendingY = 0;
+      let ticking = 0;
+
+      const resize = () => {
+        if (held || scrolling || frame) return;
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          if (held || scrolling) return;
+          const height = Math.max(
+            doc.documentElement?.scrollHeight ?? 0,
+            doc.body?.scrollHeight ?? 0,
+            120,
+          );
+          if (Math.abs(height - last) < 2) return;
+          last = height;
+          iframe.style.height = `${height}px`;
+        });
       };
+
+      const flushWheel = () => {
+        ticking = 0;
+        scrollReader(iframe, pendingX, pendingY, 0);
+        pendingX = 0;
+        pendingY = 0;
+      };
+
+      const onWheel = (event: WheelEvent) => {
+        if (event.ctrlKey || event.metaKey) return;
+        event.preventDefault();
+        scrolling = true;
+        window.clearTimeout(scrollIdle);
+        scrollIdle = window.setTimeout(() => {
+          scrolling = false;
+          resize();
+        }, 160);
+        const pane = iframe.closest(".reader");
+        const scaleX = pane instanceof HTMLElement ? pane.clientWidth : 1;
+        const scaleY = pane instanceof HTMLElement ? pane.clientHeight : 1;
+        let x = event.deltaX;
+        let y = event.deltaY;
+        if (event.deltaMode === 1) {
+          x *= 16;
+          y *= 16;
+        } else if (event.deltaMode === 2) {
+          x *= scaleX;
+          y *= scaleY;
+        }
+        pendingX += x;
+        pendingY += y;
+        if (!ticking) ticking = requestAnimationFrame(flushWheel);
+      };
+
       const onKey = (event: KeyboardEvent) => {
         if (event.defaultPrevented) return;
         if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
@@ -154,22 +212,7 @@ function HtmlLetter({
         pane.scrollTop += dy;
         event.preventDefault();
       };
-      doc.addEventListener("wheel", onWheel, { passive: false });
-      doc.addEventListener("keydown", onKey);
-      let last = 0;
-      let frame = 0;
-      let held = false;
-      const resize = () => {
-        if (held || frame) return;
-        frame = requestAnimationFrame(() => {
-          frame = 0;
-          if (held) return;
-          const height = Math.max(doc.body?.scrollHeight ?? 0, 120);
-          if (Math.abs(height - last) < 2) return;
-          last = height;
-          iframe.style.height = `${height}px`;
-        });
-      };
+
       const onDown = () => {
         held = true;
       };
@@ -177,6 +220,13 @@ function HtmlLetter({
         held = false;
         resize();
       };
+
+      doc.addEventListener("click", onClick, true);
+      doc.addEventListener("mouseup", onSelect);
+      doc.addEventListener("keyup", onSelect);
+      doc.addEventListener("dragstart", onDragStart);
+      doc.addEventListener("wheel", onWheel, { passive: false, capture: true });
+      doc.addEventListener("keydown", onKey);
       doc.addEventListener("pointerdown", onDown);
       doc.addEventListener("pointerup", onUp);
       doc.addEventListener("pointercancel", onUp);
@@ -184,6 +234,7 @@ function HtmlLetter({
       resize();
       requestAnimationFrame(resize);
       const observer = new ResizeObserver(resize);
+      if (doc.documentElement) observer.observe(doc.documentElement);
       if (doc.body) observer.observe(doc.body);
       for (const img of doc.images) {
         if (img.complete) continue;
@@ -192,13 +243,16 @@ function HtmlLetter({
       }
       const fonts = doc.fonts?.ready;
       if (fonts) void fonts.then(resize);
-      return () => {
+
+      cleanup = () => {
         cancelAnimationFrame(frame);
+        cancelAnimationFrame(ticking);
+        window.clearTimeout(scrollIdle);
         doc.removeEventListener("click", onClick, true);
         doc.removeEventListener("mouseup", onSelect);
         doc.removeEventListener("keyup", onSelect);
         doc.removeEventListener("dragstart", onDragStart);
-        doc.removeEventListener("wheel", onWheel);
+        doc.removeEventListener("wheel", onWheel, true);
         doc.removeEventListener("keydown", onKey);
         doc.removeEventListener("pointerdown", onDown);
         doc.removeEventListener("pointerup", onUp);
@@ -208,17 +262,14 @@ function HtmlLetter({
       };
     }
 
-    let cleanup: (() => void) | undefined;
-    const onLoad = () => {
-      cleanup?.();
-      cleanup = bind();
-    };
-    iframe.addEventListener("load", onLoad);
+    iframe.addEventListener("load", bind);
+    bind();
     return () => {
-      iframe.removeEventListener("load", onLoad);
+      iframe.removeEventListener("load", bind);
       cleanup?.();
+      window.clearTimeout(scrollIdle);
     };
-  }, [srcdoc, onMailTo, onQuote]);
+  }, [srcdoc]);
 
   return (
     <iframe

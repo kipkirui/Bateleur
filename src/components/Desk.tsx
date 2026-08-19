@@ -7,6 +7,7 @@ type Props = {
   open: boolean;
   onToggle: () => void;
   onHire: () => void;
+  onSettings: () => void;
   onBrief?: () => void;
   briefBusy?: boolean;
   receipt: string | null;
@@ -26,6 +27,7 @@ export function Desk({
   open,
   onToggle,
   onHire,
+  onSettings,
   onBrief,
   briefBusy,
   receipt,
@@ -47,8 +49,11 @@ export function Desk({
     const tab = !hired ? "Hire staff" : next ? "Next" : "Staff";
     return (
       <aside className="desk collapsed">
-        <button type="button" className="desk-tab" onClick={hired ? onToggle : onHire}>
+        <button type="button" className="desk-tab desk-tab-staff" onClick={hired ? onToggle : onHire}>
           {tab}
+        </button>
+        <button type="button" className="desk-tab desk-tab-settings" onClick={onSettings}>
+          Settings
         </button>
       </aside>
     );
@@ -122,6 +127,9 @@ export function Desk({
       </button>
       <div className="desk-label">Today</div>
       <p className="desk-copy muted">{receipt ?? "No triage counted yet today."}</p>
+      <button type="button" className="text-btn desk-settings" onClick={onSettings}>
+        Settings
+      </button>
     </aside>
   );
 }

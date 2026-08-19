@@ -1421,10 +1421,6 @@ export default function App() {
         mode={mode}
         onMode={setMode}
         onCompose={() => openCompose()}
-        onSettings={() => {
-          setAccountError(null);
-          setOverlay("settings");
-        }}
         paper={paper}
         onPaper={setPaper}
         stories={
@@ -1500,6 +1496,10 @@ export default function App() {
         onHire={() => {
           setDeskOpen(true);
           setOverlay("staff");
+        }}
+        onSettings={() => {
+          setAccountError(null);
+          setOverlay("settings");
         }}
         onBrief={() => void writeBrief()}
         briefBusy={briefBusy}
