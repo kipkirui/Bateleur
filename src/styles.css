@@ -1462,6 +1462,13 @@ kbd {
   max-height: calc(100vh - 64px);
 }
 
+.reader {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: none;
+  overflow-anchor: none;
+}
+
 .reader-wide {
   width: min(960px, 100%);
 }
@@ -1546,6 +1553,8 @@ kbd {
   border: 0;
   background: #fff;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: pan-y;
 }
 
 .letter-switch {

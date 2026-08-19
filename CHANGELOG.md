@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.26.10] - 2026-08-19
+
+### Fixed
+
+- Click-drag in the letter no longer rubber-bands the HTML body on every axis. The reader only scrolls vertically, and iframe height stays put while the pointer is down
+
 ## [0.26.9] - 2026-08-19
 
 ### Fixed

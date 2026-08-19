@@ -276,8 +276,19 @@ function wrapEmailDocument(cssParts: string[], body: string): string {
     <meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; base-uri 'none'" />
     <style>
       html { color-scheme: light; }
-      html, body { margin: 0; padding: 0; background: #fff; }
-      img { max-width: 100% !important; height: auto !important; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+        overflow: hidden;
+        overflow-anchor: none;
+        overscroll-behavior: none;
+      }
+      img {
+        max-width: 100% !important;
+        height: auto !important;
+        -webkit-user-drag: none;
+      }
     </style>
     ${author}
     <style>

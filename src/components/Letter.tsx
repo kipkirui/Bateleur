@@ -123,22 +123,35 @@ function HtmlLetter({
       };
       doc.addEventListener("mouseup", onSelect);
       doc.addEventListener("keyup", onSelect);
+      const onDragStart = (event: DragEvent) => {
+        if (event.target instanceof HTMLImageElement) event.preventDefault();
+      };
+      doc.addEventListener("dragstart", onDragStart);
       let last = 0;
       let frame = 0;
+      let held = false;
       const resize = () => {
-        if (frame) return;
+        if (held || frame) return;
         frame = requestAnimationFrame(() => {
           frame = 0;
-          const height = Math.max(
-            doc.body?.scrollHeight ?? 0,
-            doc.body?.offsetHeight ?? 0,
-            120,
-          );
+          if (held) return;
+          const height = Math.max(doc.body?.scrollHeight ?? 0, 120);
           if (Math.abs(height - last) < 2) return;
           last = height;
           iframe.style.height = `${height}px`;
         });
       };
+      const onDown = () => {
+        held = true;
+      };
+      const onUp = () => {
+        held = false;
+        resize();
+      };
+      doc.addEventListener("pointerdown", onDown);
+      doc.addEventListener("pointerup", onUp);
+      doc.addEventListener("pointercancel", onUp);
+      window.addEventListener("pointerup", onUp);
       resize();
       requestAnimationFrame(resize);
       const observer = new ResizeObserver(resize);
@@ -155,6 +168,11 @@ function HtmlLetter({
         doc.removeEventListener("click", onClick, true);
         doc.removeEventListener("mouseup", onSelect);
         doc.removeEventListener("keyup", onSelect);
+        doc.removeEventListener("dragstart", onDragStart);
+        doc.removeEventListener("pointerdown", onDown);
+        doc.removeEventListener("pointerup", onUp);
+        doc.removeEventListener("pointercancel", onUp);
+        window.removeEventListener("pointerup", onUp);
         observer.disconnect();
       };
     }
