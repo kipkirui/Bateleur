@@ -654,6 +654,19 @@ fn set_mail_alerts(app: AppHandle, state: State<AppState>, on: bool) -> Result<b
 }
 
 #[tauri::command]
+fn check_updates(state: State<AppState>) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::pref_bool(&conn, "check_updates")
+}
+
+#[tauri::command]
+fn set_check_updates(state: State<AppState>, on: bool) -> Result<bool, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::set_pref(&conn, "check_updates", if on { "1" } else { "0" })?;
+    Ok(on)
+}
+
+#[tauri::command]
 fn move_to_reading(state: State<AppState>, message_id: String) -> Result<Mailbox, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     db::move_to_reading(&conn, &message_id)
@@ -883,6 +896,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
             std::fs::create_dir_all(&dir)?;
@@ -913,6 +928,8 @@ pub fn run() {
             remove_account,
             mail_alerts,
             set_mail_alerts,
+            check_updates,
+            set_check_updates,
             move_to_reading,
             move_to_action,
             reset_sender,

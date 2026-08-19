@@ -1,6 +1,6 @@
 [package]
 name = "bateleur"
-version = "0.26.11"
+version = "0.27.0"
 description = "Bateleur — a magazine-shaped desktop mail client"
 authors = ["Kipkirui"]
 license = "MIT"
@@ -34,3 +34,5 @@ base64 = "0.22"
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "hostname", "rustls-tls"] }
 sha2 = "0.10"
 ureq = { version = "2.12", default-features = false, features = ["tls", "json"] }
+tauri-plugin-updater = "2.10.1"
+tauri-plugin-process = "2.3.1"

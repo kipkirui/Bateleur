@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { addAccount, addAccountOAuth, archiveMessage, deleteClipping, hydrateMailbox, isTauri, listClippings, loadComposeAttachments, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToAction, moveToReading, removeAccount, resetSender, saveClipping, saveMailDraft, saveStoryOverrides, searchMail, sendMail, setFlag, setMailAlerts, staffBrief as loadStaffBrief, staffStatus as loadStaffStatus, storyOverrides as loadStoryOverrides, summarizeAccount as writeStaffBrief, syncAccount } from "./api";
+import { addAccount, addAccountOAuth, archiveMessage, checkUpdates as loadCheckUpdates, deleteClipping, hydrateMailbox, isTauri, listClippings, loadComposeAttachments, loadMailbox, lockSenderReading, mailAlerts as loadMailAlerts, moveToAction, moveToReading, removeAccount, resetSender, saveClipping, saveMailDraft, saveStoryOverrides, searchMail, sendMail, setCheckUpdates, setFlag, setMailAlerts, staffBrief as loadStaffBrief, staffStatus as loadStaffStatus, storyOverrides as loadStoryOverrides, summarizeAccount as writeStaffBrief, syncAccount } from "./api";
 import { readableText } from "./lib/emailHtml";
 import { toEditorHtml } from "./components/LetterEditor";
 import { Compose } from "./components/Compose";
@@ -30,6 +30,8 @@ import {
 import { loadWaitingDismissed, saveWaitingDismissed, waitingItems } from "./lib/waiting";
 import { groupStories, patchOverride, railStories, type StoryDesk } from "./lib/stories";
 import { UNDO_MS, archiveLabel, flagLabel } from "./lib/undo";
+import { checkForUpdate, installUpdate } from "./lib/updates";
+import type { Update } from "@tauri-apps/plugin-updater";
 import "./styles.css";
 
 type Overlay = "none" | "reader" | "compose" | "settings" | "staff" | "sender" | "palette" | "clippings";
@@ -54,6 +56,9 @@ export default function App() {
   const [paper, setPaper] = useState<PaperStock>(loadPaper);
   const [remoteImages, setRemoteImages] = useState(loadRemoteImagesPref);
   const [mailAlerts, setMailAlertsOn] = useState(true);
+  const [checkUpdates, setCheckUpdatesOn] = useState(true);
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
   const [staff, setStaff] = useState<StaffStatus>({
     hired: false,
     provider: "openai",
@@ -101,6 +106,7 @@ export default function App() {
   const [settingsNonce, setSettingsNonce] = useState(0);
   const [syncByAccount, setSyncByAccount] = useState<Record<string, SyncStatus>>({});
   const seenOnOpen = useRef<string | null>(null);
+  const pendingUpdate = useRef<Update | null>(null);
   const accountIdRef = useRef(accountId);
   accountIdRef.current = accountId;
   const archiveQueue = useRef<Message[]>([]);
@@ -137,10 +143,29 @@ export default function App() {
   useEffect(() => {
     if (!isTauri()) return;
     void loadMailAlerts().then(setMailAlertsOn).catch(() => {});
+    void loadCheckUpdates().then(setCheckUpdatesOn).catch(() => {});
     void loadStaffStatus().then(setStaff).catch(() => {});
     void loadStoryOverrides().then(setStoryOverrides).catch(() => {});
     void listClippings().then(setClippings).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!isTauri() || !checkUpdates) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void checkForUpdate()
+        .then((update) => {
+          if (cancelled || !update) return;
+          pendingUpdate.current = update;
+          setUpdateVersion(update.version);
+        })
+        .catch(() => {});
+    }, 2500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [checkUpdates]);
 
   useEffect(() => {
     if (!isTauri() || !staff.summarizeAccount) {
@@ -1315,6 +1340,25 @@ export default function App() {
       },
     },
     {
+      id: "updates",
+      label: "Check for updates",
+      run: () => {
+        setOverlay("none");
+        void checkForUpdate()
+          .then((update) => {
+            if (!update) {
+              setToast("Bateleur is up to date");
+              return;
+            }
+            pendingUpdate.current = update;
+            setUpdateVersion(update.version);
+          })
+          .catch(() => {
+            setToast("Could not reach GitHub for updates");
+          });
+      },
+    },
+    {
       id: "staff",
       label: staff.hired ? "Staff" : "Hire staff",
       run: () => {
@@ -1586,6 +1630,11 @@ export default function App() {
             setMailAlertsOn(on);
             void setMailAlerts(on).catch(() => {});
           }}
+          checkUpdates={checkUpdates}
+          onCheckUpdates={(on) => {
+            setCheckUpdatesOn(on);
+            void setCheckUpdates(on).catch(() => {});
+          }}
         />
       ) : null}
 
@@ -1660,7 +1709,42 @@ export default function App() {
         />
       ) : null}
 
-      {toast ? (
+      {updateVersion ? (
+        <div className="toast">
+          <span>
+            {updateBusy ? "Installing update…" : `Bateleur ${updateVersion} is ready`}
+          </span>
+          {updateBusy ? null : (
+            <>
+              <button
+                type="button"
+                className="toast-undo"
+                onClick={() => {
+                  const next = pendingUpdate.current;
+                  if (!next) return;
+                  setUpdateBusy(true);
+                  void installUpdate(next).catch((err) => {
+                    setUpdateBusy(false);
+                    setToast(err instanceof Error ? err.message : String(err));
+                  });
+                }}
+              >
+                Install
+              </button>
+              <button
+                type="button"
+                className="toast-undo"
+                onClick={() => {
+                  pendingUpdate.current = null;
+                  setUpdateVersion(null);
+                }}
+              >
+                Later
+              </button>
+            </>
+          )}
+        </div>
+      ) : toast ? (
         <div className="toast">
           <span>{toast}</span>
           {canUndo ? (

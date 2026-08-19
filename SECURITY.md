@@ -18,6 +18,7 @@ Please report privately if the issue could let someone:
 - Execute script from a message body (XSS in the reader)
 - Send mail without the confirm step
 - Proxy mail or model calls to an unexpected host
+- Sign a malicious updater payload (loss of the updater private key)
 
 Do **not** open a public GitHub issue for those.
 

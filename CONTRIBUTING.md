@@ -63,6 +63,29 @@ When you cut a version, update all four together:
 
 Then add a section to [`CHANGELOG.md`](./CHANGELOG.md) and tag `vX.Y.Z` on `main`.
 
+## Releases
+
+Tag `vX.Y.Z` on `main` to build Windows NSIS/MSI, macOS `.dmg`, and Linux AppImage/`.deb` as a **draft** GitHub Release. The workflow signs updater artifacts with minisign. Apple notarization and Windows Authenticode only run if those secrets exist; without them the installers still build, unsigned at the OS level.
+
+Required GitHub Actions secret:
+
+- `TAURI_SIGNING_PRIVATE_KEY` — contents of the private key at `.tauri/bateleur.key` (never commit this file)
+
+Optional:
+
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — only if the key has a password
+- `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` — Developer ID + notarization
+- A Windows Authenticode / Azure Trusted Signing cert when you have one
+
+Local installer (needs the private key in the environment):
+
+```bash
+$env:TAURI_SIGNING_PRIVATE_KEY_PATH = "$PWD\.tauri\bateleur.key"
+npm run bundle
+```
+
+If you lose the updater private key, already-installed apps cannot verify new updates. Generate a new pair with `npx tauri signer generate --ci -w .tauri/bateleur.key` and put the new public key in `src-tauri/tauri.conf.json`.
+
 ## Code of conduct
 
 See [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md).

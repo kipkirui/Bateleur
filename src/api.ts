@@ -179,6 +179,16 @@ export async function setMailAlerts(on: boolean): Promise<boolean> {
   return invoke<boolean>("set_mail_alerts", { on });
 }
 
+export async function checkUpdates(): Promise<boolean> {
+  if (!isTauri()) return true;
+  return invoke<boolean>("check_updates");
+}
+
+export async function setCheckUpdates(on: boolean): Promise<boolean> {
+  if (!isTauri()) return on;
+  return invoke<boolean>("set_check_updates", { on });
+}
+
 export async function moveToReading(messageId: string): Promise<Mailbox> {
   if (!isTauri()) {
     throw new Error("Classification needs the desktop app.");

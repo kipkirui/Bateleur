@@ -2,6 +2,9 @@
 .env
 .env.*
 *.db
+.tauri/
+*.key
+*.key.pub
 
 # Logs
 logs

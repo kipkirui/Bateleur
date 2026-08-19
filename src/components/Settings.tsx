@@ -18,6 +18,8 @@ type Props = {
   onRemoteImages: (on: boolean) => void;
   mailAlerts: boolean;
   onMailAlerts: (on: boolean) => void;
+  checkUpdates: boolean;
+  onCheckUpdates: (on: boolean) => void;
 };
 
 export function Settings({
@@ -34,6 +36,8 @@ export function Settings({
   onRemoteImages,
   mailAlerts,
   onMailAlerts,
+  checkUpdates,
+  onCheckUpdates,
 }: Props) {
   const [address, setAddress] = useState("");
   const [password, setPassword] = useState("");
@@ -190,6 +194,14 @@ export function Settings({
               onChange={(e) => onMailAlerts(e.target.checked)}
             />
             Notify when new mail arrives
+          </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={checkUpdates}
+              onChange={(e) => onCheckUpdates(e.target.checked)}
+            />
+            Check GitHub for Bateleur updates
           </label>
 
           <div className="account-list">

@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.27.0] - 2026-08-19
+
+### Added
+
+- GitHub Releases build Windows NSIS/MSI, macOS `.dmg`, and Linux AppImage/`.deb`. Updater artifacts are minisign-signed. Settings **Check GitHub for Bateleur updates** (on by default) offers Install; it does not apply an update until you say so
+
 ## [0.26.11] - 2026-08-19
 
 ### Fixed

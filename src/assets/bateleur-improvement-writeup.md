@@ -12,7 +12,7 @@ Per-sender Reading lock (move twice), **Why here?**, magazine cover / briefing /
 
 ## Still open
 
-- Signed installers and auto-updater
+- Signed installers and auto-updater (in-app check + GitHub Releases; Apple/Windows OS signatures still need certs)
 - Calendar protocol (CalDAV / Google) — Radar stays invites already in mail
 - Mobile shell (background IMAP and push)
 

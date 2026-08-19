@@ -24,6 +24,8 @@ Living checklist against the product in [`Make Email Great Again.md`](./Make%20E
 
 **Staff.** Hire staff stores the key in the OS keychain (`bateleur.staff`, separate from mail) and the provider, model, endpoint, and capability switches in SQLite. **Summarize this message** and **Generate drafts** run on demand from the reader when the switch is on and a key is present. **Summarize this account** writes a Morning Brief from unread Action (feed, desk, or Ctrl+K). The list is at most eight letters; a line drops once that letter is read, archived, or leaves Action. **Summarize all new mail** is opt-in batch-on-sync: after IDLE or Sync, new unread inbox letters can get a per-letter blurb (capped). **Triage this letter** can move a letter between Action and Reading; **Triage new mail** does the same for new unread inbox letters after sync, capped, off until that switch is on. Local 2FA / password / KYC is not batch-overridden. A sender pinned to Reading still wins. **Draft an RSVP** is opt-in on a Radar invite — it opens Compose and never sends. A draft opens in Compose — Send then Confirm still required. The letter body goes only to the chosen provider (OpenAI, Anthropic, Gemini, OpenRouter, or a compatible `/v1/chat/completions` endpoint). If the key is missing or a call fails, mail still works and the reader shows why. Settings is mailboxes only. Stories (pin / rename / merge / not a story) are local subject grouping, not a model call; the rail lists them only after staff is hired. Radar is local ICS, not a model call.
 
+**Distribution.** A `vX.Y.Z` tag builds a draft GitHub Release: Windows NSIS/MSI, macOS `.dmg`, Linux AppImage/`.deb`. Updater payloads are minisign-signed against the public key in `tauri.conf.json`. Settings **Check GitHub for Bateleur updates** (on by default) looks at `latest.json` on GitHub Releases; Install applies it. That is not staff and not a mail API. Apple notarization and Windows Authenticode still need certificates.
+
 ## Pending — mail client
 
 These are required before Bateleur is an Outlook-shaped client, not a reader.
@@ -37,7 +39,7 @@ These are required before Bateleur is an Outlook-shaped client, not a reader.
 
 ## Pending — platform
 
-- Signed installers (`.dmg`, `.msi`, AppImage/`.deb`) and auto-updater
+- Apple notarization and Windows Authenticode (need a Developer ID / code-signing certificate). Unsigned installers still build from a `v*` tag
 - Mobile shell (`tauri android/ios init`); hard parts are background IMAP and push
 - Calendar protocol (CalDAV / Google) — do not fake a full calendar from nothing; Radar is invites already in mail
 
