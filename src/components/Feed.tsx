@@ -28,6 +28,8 @@ type Props = {
   onBulkFlag: () => void;
   onClearChecked: () => void;
   emptyLabel: string;
+  combinedFrom?: string | null;
+  mailboxOf?: (accountId: string) => string | undefined;
   receiptLine?: string | null;
   awaiting?: WaitingItem[];
   onDismissAwaiting?: (id: string) => void;
@@ -59,6 +61,8 @@ export function Feed({
   onBulkFlag,
   onClearChecked,
   emptyLabel,
+  combinedFrom = null,
+  mailboxOf,
   receiptLine,
   awaiting = [],
   onDismissAwaiting,
@@ -132,9 +136,12 @@ export function Feed({
       ) : null}
 
       <div className="feed-scroll">
+        {combinedFrom ? (
+          <p className="feed-masthead">All mailboxes · {combinedFrom}</p>
+        ) : null}
         {actionEmpty ? (
           <div className="empty empty-clear">
-            <p>Nothing needs you right now.</p>
+            <p>{emptyLabel}</p>
             <p className="muted">
               {receiptLine ?? "Action is clear. Reading is still there when you want it."}
             </p>
@@ -166,6 +173,7 @@ export function Feed({
                         </span>
                         <span className="await-subject">
                           {message.invite?.location || readableText(message.fromName) || message.fromEmail}
+                          <MailboxMark name={mailboxOf?.(message.accountId)} />
                         </span>
                       </button>
                     </li>
@@ -199,6 +207,7 @@ export function Feed({
                         <span className="await-why">{item.reason}</span>
                         <span className="await-subject">
                           {readableText(item.message.subject)}
+                          <MailboxMark name={mailboxOf?.(item.message.accountId)} />
                         </span>
                       </button>
                       {item.kind === "stale" && onDismissAwaiting ? (
@@ -241,7 +250,10 @@ export function Feed({
                         <span className="await-why">
                           {message.why ?? "Too thin to guess Action or Reading."}
                         </span>
-                        <span className="await-subject">{readableText(message.subject)}</span>
+                        <span className="await-subject">
+                          {readableText(message.subject)}
+                          <MailboxMark name={mailboxOf?.(message.accountId)} />
+                        </span>
                       </button>
                       <span className="card-actions">
                         <button type="button" className="text-btn" onClick={() => onAction(message)}>
@@ -276,6 +288,7 @@ export function Feed({
                   <span className="raw-from">
                     {readableText(message.fromName)}
                     {message.flagged ? <span className="flag-mark" title="Flagged" /> : null}
+                    <MailboxMark name={mailboxOf?.(message.accountId)} />
                   </span>
                   <span className="raw-subject">{readableText(message.subject)}</span>
                   <span className="raw-preview">{readableText(message.preview)}</span>
@@ -299,6 +312,7 @@ export function Feed({
             onReading={onReading}
             onSender={onSender}
             storyDesk={tools}
+            mailboxOf={mailboxOf}
           />
         ) : feed === "archive" ? (
           <BackIssues
@@ -310,6 +324,7 @@ export function Feed({
             onToggleCheck={onToggleCheck}
             onOpen={onOpen}
             onSender={onSender}
+            mailboxOf={mailboxOf}
           />
         ) : (
           <div className="magazine">
@@ -328,6 +343,7 @@ export function Feed({
                   onOpen={onOpen}
                   onSender={onSender}
                   storyDesk={tools}
+                  mailboxOf={mailboxOf}
                 />
               ))}
             </div>
@@ -352,6 +368,7 @@ function ActionMagazine({
   onReading,
   onSender,
   storyDesk,
+  mailboxOf,
 }: {
   messages: Message[];
   digest: Message[];
@@ -366,6 +383,7 @@ function ActionMagazine({
   onReading: (message: Message) => void;
   onSender: (message: Message) => void;
   storyDesk?: StoryDesk;
+  mailboxOf?: (accountId: string) => string | undefined;
 }) {
   const stories = groupStories(messages, storyDesk?.overrides);
   const digestStories = groupStories(digest, storyDesk?.overrides);
@@ -390,6 +408,7 @@ function ActionMagazine({
             onReply={onReply}
             onReading={onReading}
             onSender={onSender}
+            mailbox={mailboxOf?.(lead.accountId)}
           />
           {cover.messages.slice(1).map((message) => (
             <BriefRow
@@ -401,6 +420,7 @@ function ActionMagazine({
               onSelect={onSelect}
               onToggleCheck={onToggleCheck}
               onOpen={onOpen}
+              mailbox={mailboxOf?.(message.accountId)}
             />
           ))}
         </div>
@@ -421,6 +441,7 @@ function ActionMagazine({
                   onSelect={onSelect}
                   onToggleCheck={onToggleCheck}
                   onOpen={onOpen}
+                  mailbox={mailboxOf?.(message.accountId)}
                 />
               ))}
             </div>
@@ -443,6 +464,7 @@ function ActionMagazine({
               onOpen={onOpen}
               onSender={onSender}
               storyDesk={storyDesk}
+              mailboxOf={mailboxOf}
             />
           ))}
         </div>
@@ -460,6 +482,7 @@ function BackIssues({
   onToggleCheck,
   onOpen,
   onSender,
+  mailboxOf,
 }: {
   messages: Message[];
   selectedId: string | null;
@@ -469,6 +492,7 @@ function BackIssues({
   onToggleCheck: (id: string) => void;
   onOpen: (id: string) => void;
   onSender: (message: Message) => void;
+  mailboxOf?: (accountId: string) => string | undefined;
 }) {
   const issues = groupIssues(messages);
   return (
@@ -504,6 +528,7 @@ function BackIssues({
                     }}
                   >
                     {readableText(message.fromName) || message.fromEmail}
+                    <MailboxMark name={mailboxOf?.(message.accountId)} />
                   </button>
                 </div>
                 <span className="issue-when">{formatWhen(message.receivedAt)}</span>
@@ -529,6 +554,7 @@ function Cover({
   onReply,
   onReading,
   onSender,
+  mailbox,
 }: {
   message: Message;
   thread: number;
@@ -542,6 +568,7 @@ function Cover({
   onReply: (message: Message) => void;
   onReading: (message: Message) => void;
   onSender: (message: Message) => void;
+  mailbox?: string;
 }) {
   const [why, setWhy] = useState(false);
 
@@ -551,6 +578,7 @@ function Cover({
   }
 
   const kicker = [
+    mailbox,
     thread > 1 ? `Developing · ${thread} letters` : null,
     message.category,
     message.hero?.label,
@@ -613,6 +641,7 @@ function BriefRow({
   onSelect,
   onToggleCheck,
   onOpen,
+  mailbox,
 }: {
   message: Message;
   selected: boolean;
@@ -621,6 +650,7 @@ function BriefRow({
   onSelect: (id: string) => void;
   onToggleCheck: (id: string) => void;
   onOpen: (id: string) => void;
+  mailbox?: string;
 }) {
   return (
     <div
@@ -637,7 +667,10 @@ function BriefRow({
         {message.category ? <span className="badge">{message.category}</span> : null}
         <span className="brief-copy">{readableText(message.subject)}</span>
       </span>
-      <span className="brief-from">{readableText(message.fromName)}</span>
+      <span className="brief-from">
+        {readableText(message.fromName)}
+        <MailboxMark name={mailbox} />
+      </span>
     </div>
   );
 }
@@ -651,6 +684,7 @@ function ArticleTeaser({
   onToggleCheck,
   onOpen,
   onSender,
+  mailbox,
 }: {
   message: Message;
   selected: boolean;
@@ -660,6 +694,7 @@ function ArticleTeaser({
   onToggleCheck: (id: string) => void;
   onOpen: (id: string) => void;
   onSender: (message: Message) => void;
+  mailbox?: string;
 }) {
   return (
     <article
@@ -685,6 +720,7 @@ function ArticleTeaser({
         <span className="byline">
           Latest by {readableText(message.fromName)}
           {message.flagged ? <span className="flag-mark" title="Flagged" /> : null}
+          {mailbox ? <span> · {mailbox}</span> : null}
           <span> · {formatWhen(message.receivedAt)}</span>
         </span>
       </button>
@@ -704,6 +740,7 @@ function StoryTeasers({
   onOpen,
   onSender,
   storyDesk,
+  mailboxOf,
 }: {
   story: Story;
   others?: Story[];
@@ -715,6 +752,7 @@ function StoryTeasers({
   onOpen: (id: string) => void;
   onSender: (message: Message) => void;
   storyDesk?: StoryDesk;
+  mailboxOf?: (accountId: string) => string | undefined;
 }) {
   const [lead, ...earlier] = story.messages;
   if (!lead) return null;
@@ -730,6 +768,7 @@ function StoryTeasers({
         onToggleCheck={onToggleCheck}
         onOpen={onOpen}
         onSender={onSender}
+        mailbox={mailboxOf?.(lead.accountId)}
       />
       {earlier.map((message) => (
         <BriefRow
@@ -741,6 +780,7 @@ function StoryTeasers({
           onSelect={onSelect}
           onToggleCheck={onToggleCheck}
           onOpen={onOpen}
+          mailbox={mailboxOf?.(message.accountId)}
         />
       ))}
     </div>
@@ -788,6 +828,11 @@ function Check({ on, onToggle }: { on: boolean; onToggle: () => void }) {
       }}
     />
   );
+}
+
+function MailboxMark({ name }: { name?: string }) {
+  if (!name) return null;
+  return <span className="mailbox-chip">{name}</span>;
 }
 
 function feedHeading(feed: FeedId): string {

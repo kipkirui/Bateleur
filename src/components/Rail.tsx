@@ -67,6 +67,20 @@ export function Rail({
   storyId = null,
   onStory,
 }: Props) {
+  const customFolders = folders.filter(
+    (folder) =>
+      folder.canonical === "custom" &&
+      (!accountId || folder.accountId === accountId),
+  );
+  const shownCustom =
+    accountId === null
+      ? customFolders.filter(
+          (folder, index) =>
+            customFolders.findIndex((other) => other.imapName === folder.imapName) ===
+            index,
+        )
+      : customFolders;
+
   return (
     <aside className="rail">
       <div className="brand">
@@ -171,6 +185,11 @@ export function Rail({
         onClick={() => onAccount(null)}
       >
         All mailboxes
+        {accounts.length > 1 ? (
+          <span className="nav-meta">
+            {accounts.map((account) => account.label).join(" · ")}
+          </span>
+        ) : null}
       </button>
       {accounts.map((account) => (
         <button
@@ -229,17 +248,15 @@ export function Rail({
           {item.label}
         </button>
       ))}
-      {folders
-        .filter(
-          (folder) =>
-            folder.canonical === "custom" &&
-            (!accountId || folder.accountId === accountId),
-        )
-        .map((folder) => {
+      {shownCustom.map((folder) => {
           const id = `custom:${folder.imapName}` as FeedId;
           return (
             <button
-              key={`${folder.accountId}:${folder.imapName}`}
+              key={
+                accountId === null
+                  ? folder.imapName
+                  : `${folder.accountId}:${folder.imapName}`
+              }
               type="button"
               className={feed === id ? "nav active" : "nav"}
               onClick={() => onFeed(id)}

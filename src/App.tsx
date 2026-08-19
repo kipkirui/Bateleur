@@ -469,11 +469,8 @@ export default function App() {
     try {
       const next = await addAccount(draft);
       setMailbox(next);
-      const live =
-        next.accounts.find(
-          (a) => a.address.toLowerCase() === draft.address.trim().toLowerCase(),
-        ) ?? next.accounts[0];
-      if (live) setAccountId(live.id);
+      setAccountId(null);
+      setStoryFilter(null);
       setSettingsNonce((n) => n + 1);
       setToast("Mailbox connected");
     } catch (err) {
@@ -496,11 +493,8 @@ export default function App() {
     try {
       const next = await addAccountOAuth(draft, provider);
       setMailbox(next);
-      const live =
-        next.accounts.find(
-          (a) => a.address.toLowerCase() === draft.address.trim().toLowerCase(),
-        ) ?? next.accounts[0];
-      if (live) setAccountId(live.id);
+      setAccountId(null);
+      setStoryFilter(null);
       setSettingsNonce((n) => n + 1);
       setToast("Signed in. Fetching mail.");
     } catch (err) {
@@ -1105,7 +1099,9 @@ export default function App() {
                 : feed === "uncertain"
                   ? "Nothing uncertain. Weak matches land here instead of guessing Action."
                 : feed === "action"
-                  ? "Nothing needs you right now."
+                  ? accountId === null && accounts.length > 1
+                    ? "Nothing needs you in any mailbox."
+                    : "Nothing needs you right now."
                   : "Nothing in this feed.";
 
   const paletteCommands: PaletteCommand[] = [
@@ -1331,6 +1327,7 @@ export default function App() {
       label: "All mailboxes",
       run: () => {
         setAccountId(null);
+        setStoryFilter(null);
         setOverlay("none");
       },
     },
@@ -1340,6 +1337,7 @@ export default function App() {
       hint: account.address,
       run: () => {
         setAccountId(account.id);
+        setStoryFilter(null);
         setOverlay("none");
       },
     })),
@@ -1361,7 +1359,10 @@ export default function App() {
       <Rail
         accounts={accounts}
         accountId={accountId}
-        onAccount={setAccountId}
+        onAccount={(id) => {
+          setAccountId(id);
+          setStoryFilter(null);
+        }}
         feed={feed}
         onFeed={setFeed}
         waiting={waitingFor(messages, accountId)}
@@ -1429,6 +1430,16 @@ export default function App() {
         onBulkFlag={bulkFlag}
         onClearChecked={() => setCheckedIds(new Set())}
         emptyLabel={emptyLabel}
+        combinedFrom={
+          accountId === null && accounts.length > 1
+            ? accounts.map((account) => account.label).join(" · ")
+            : null
+        }
+        mailboxOf={
+          accountId === null && accounts.length > 1
+            ? (id) => accounts.find((account) => account.id === id)?.label
+            : undefined
+        }
         receiptLine={feed === "action" ? receiptLine : null}
         awaiting={feed === "awaiting" ? awaiting : []}
         onDismissAwaiting={dismissWaiting}

@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.26.9] - 2026-08-19
+
+### Fixed
+
+- **All mailboxes** is the combined view again: Action / Reading / Sent mix every account, letters show which mailbox they belong to, and connecting a second mailbox no longer jumps you into that account alone
+
 ## [0.26.8] - 2026-08-19
 
 ### Fixed

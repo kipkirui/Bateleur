@@ -375,6 +375,14 @@ kbd {
   padding: 8px 28px 48px;
 }
 
+.feed-masthead {
+  margin: 8px 0 12px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
 .magazine,
 .raw-list,
 .empty {
@@ -663,6 +671,15 @@ kbd {
   padding: 2px 7px;
   border-radius: 999px;
   white-space: nowrap;
+}
+
+.mailbox-chip {
+  margin-left: 0.45em;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  font-weight: 500;
 }
 
 .cover {
