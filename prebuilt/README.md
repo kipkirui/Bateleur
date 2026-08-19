@@ -7,8 +7,8 @@ warn; that is expected until a code-signing certificate is in place.
 
 | File | Use |
 | --- | --- |
-| [`windows/Bateleur_0.27.4_x64_en-US.msi`](./windows/Bateleur_0.27.4_x64_en-US.msi) | Installer. Prefer this. |
-| [`windows/Bateleur_0.27.4_x64-setup.exe`](./windows/Bateleur_0.27.4_x64-setup.exe) | NSIS setup. Defender often quarantines this one. |
+| [`windows/Bateleur_0.27.5_x64_en-US.msi`](./windows/Bateleur_0.27.5_x64_en-US.msi) | Installer. Prefer this. |
+| [`windows/Bateleur_0.27.5_x64-setup.exe`](./windows/Bateleur_0.27.5_x64-setup.exe) | NSIS setup. Defender often quarantines this one. |
 | [`windows/Bateleur.exe`](./windows/Bateleur.exe) | Portable. Needs [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) (Windows 11 usually has it). |
 
 SHA-256 checksums: [`windows/SHA256SUMS`](./windows/SHA256SUMS).
