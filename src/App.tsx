@@ -568,7 +568,7 @@ export default function App() {
     setComposeReplaceId(null);
     setComposeHeading("New letter");
     setCanUndo(true);
-    setToast("Sending");
+    setToast("Sending. Undo now — you cannot recall it after it leaves.");
     window.clearTimeout(sendTimer.current);
     sendTimer.current = window.setTimeout(() => {
       void commitSend();
@@ -652,7 +652,14 @@ export default function App() {
       setMailbox(next);
       setFeed("sent");
       setAccountId(draft.accountId);
-      setToast("Sent");
+      const n = (draft.attachments ?? []).length;
+      setToast(
+        n === 0
+          ? "Sent. You cannot recall this letter."
+          : n === 1
+            ? "Sent with 1 file. You cannot recall this letter."
+            : `Sent with ${n} files. You cannot recall this letter.`,
+      );
       note("sent");
     } catch (err) {
       restoreCompose(draft, quote);
@@ -1045,7 +1052,11 @@ export default function App() {
 
   useEffect(() => {
     if (!toast || canUndo) return;
-    const ms = toast.startsWith("You ") && toast.endsWith(" today.") ? 4500 : 2200;
+    const ms =
+      toast.includes("cannot recall") ||
+      (toast.startsWith("You ") && toast.endsWith(" today."))
+        ? 4500
+        : 2200;
     const id = window.setTimeout(() => setToast(null), ms);
     return () => window.clearTimeout(id);
   }, [toast, canUndo]);

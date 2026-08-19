@@ -69,6 +69,8 @@ export function Compose({
   const [draftBody, setDraftBody] = useState("");
   const [showCc, setShowCc] = useState(() => cc.trim().length > 0);
   const [showBcc, setShowBcc] = useState(() => bcc.trim().length > 0);
+  const [attachNote, setAttachNote] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const locked = busy || saving;
   const hasBody = readableText(body).length > 0;
   const canSave =
@@ -117,11 +119,37 @@ export function Compose({
   return (
     <div className={bleed ? "overlay overlay-bleed" : "overlay"} role="dialog" aria-modal="true">
       <form
-        className={bleed ? "composer composer-bleed" : "composer"}
+        className={
+          bleed
+            ? `composer composer-bleed${dragging ? " composer-drop" : ""}`
+            : `composer${dragging ? " composer-drop" : ""}`
+        }
         onSubmit={(e) => {
           e.preventDefault();
           if (!canSend) return;
           setConfirming(true);
+        }}
+        onDragEnter={(e) => {
+          if (!hasFiles(e.dataTransfer)) return;
+          e.preventDefault();
+          if (!locked) setDragging(true);
+        }}
+        onDragOver={(e) => {
+          if (!hasFiles(e.dataTransfer)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = locked ? "none" : "copy";
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setDragging(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          if (locked) return;
+          const list = e.dataTransfer.files;
+          if (!list?.length) return;
+          void addFiles(list, files, onFiles, setAttachNote);
         }}
       >
         <header>
@@ -214,19 +242,19 @@ export function Compose({
             <input
               type="file"
               multiple
-              hidden
               disabled={locked}
               onChange={(e) => {
                 const list = e.target.files;
                 e.target.value = "";
                 if (!list) return;
-                void addFiles(list, files, onFiles);
+                void addFiles(list, files, onFiles, setAttachNote);
               }}
             />
           </label>
           {files.map((file, index) => (
             <span key={`${file.filename}-${index}`} className="attach-chip">
               {file.filename}
+              <span className="muted">{formatSize(approxBytes(file.data))}</span>
               <button
                 type="button"
                 className="text-btn"
@@ -238,6 +266,7 @@ export function Compose({
             </span>
           ))}
         </div>
+        {attachNote ? <p className="form-error">{attachNote}</p> : null}
         <details className="compose-snippets">
           <summary>Snippets</summary>
           <p className="muted">
@@ -295,7 +324,7 @@ export function Compose({
       {confirming ? (
         <ConfirmModal
           title="Send this letter?"
-          body={`It will go to ${sendTargets(to, cc, bcc)} via SMTP. Bateleur will not take it back.`}
+          body={confirmSendBody(to, cc, bcc, files)}
           confirmLabel="Send"
           busy={busy}
           onCancel={() => setConfirming(false)}
@@ -319,15 +348,49 @@ function sendTargets(to: string, cc: string, bcc: string): string {
   return parts.join("; ");
 }
 
+function confirmSendBody(
+  to: string,
+  cc: string,
+  bcc: string,
+  files: DraftAttachment[],
+): string {
+  const dest = sendTargets(to, cc, bcc);
+  const names = files.map((file) => file.filename).filter(Boolean);
+  const attached =
+    names.length === 0
+      ? ""
+      : names.length === 1
+        ? ` Attached: ${names[0]}.`
+        : ` Attached: ${names.join(", ")}.`;
+  return `It will go to ${dest} via SMTP.${attached} You can undo for a few seconds. After it leaves, you cannot recall it.`;
+}
+
+function hasFiles(data: DataTransfer | null): boolean {
+  if (!data) return false;
+  return [...data.types].includes("Files");
+}
+
 async function addFiles(
   list: FileList,
   current: DraftAttachment[],
   onFiles: (files: DraftAttachment[]) => void,
+  onNote: (note: string | null) => void,
 ) {
   const next = [...current];
+  const skipped: string[] = [];
   for (const file of [...list]) {
-    if (next.length >= MAX_FILES) break;
-    if (file.size > MAX_BYTES) continue;
+    if (next.length >= MAX_FILES) {
+      skipped.push(`At most ${MAX_FILES} files on a letter.`);
+      break;
+    }
+    if (file.size > MAX_BYTES) {
+      skipped.push(`“${file.name}” is larger than 8 MB.`);
+      continue;
+    }
+    if (file.size === 0) {
+      skipped.push(`“${file.name}” is empty.`);
+      continue;
+    }
     const data = await readDataUrl(file);
     next.push({
       filename: file.name,
@@ -336,6 +399,18 @@ async function addFiles(
     });
   }
   onFiles(next);
+  onNote(skipped[0] ?? null);
+}
+
+function approxBytes(data: string): number {
+  const payload = data.includes("base64,") ? data.slice(data.indexOf("base64,") + 7) : data;
+  return Math.max(0, Math.floor((payload.length * 3) / 4));
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function readDataUrl(file: File): Promise<string> {
