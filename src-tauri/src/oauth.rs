@@ -17,6 +17,7 @@ pub struct OAuthStatus {
     pub google: bool,
     pub microsoft: bool,
     pub google_client_id: String,
+    pub google_client_secret: String,
     pub microsoft_client_id: String,
 }
 
@@ -24,6 +25,8 @@ pub struct OAuthStatus {
 struct ClientFile {
     #[serde(default)]
     google: String,
+    #[serde(default)]
+    google_secret: String,
     #[serde(default)]
     microsoft: String,
 }
@@ -35,6 +38,8 @@ pub struct TokenBlob {
     pub provider: String,
     #[serde(default)]
     pub client_id: String,
+    #[serde(default)]
+    pub client_secret: String,
     pub refresh: String,
     pub access: String,
     pub expires_at: u64,
@@ -79,17 +84,24 @@ pub fn uses_xoauth2(account: &Account) -> bool {
 pub fn status(app_data: &Path) -> OAuthStatus {
     let stored = load_clients(app_data);
     OAuthStatus {
-        google: !stored.google.is_empty(),
+        google: !stored.google.is_empty() && !stored.google_secret.is_empty(),
         microsoft: !stored.microsoft.is_empty(),
         google_client_id: stored.google,
+        google_client_secret: stored.google_secret,
         microsoft_client_id: stored.microsoft,
     }
 }
 
-pub fn save_clients(app_data: &Path, google: String, microsoft: String) -> Result<(), String> {
+pub fn save_clients(
+    app_data: &Path,
+    google: String,
+    google_secret: String,
+    microsoft: String,
+) -> Result<(), String> {
     std::fs::create_dir_all(app_data).map_err(|e| e.to_string())?;
     let file = ClientFile {
         google: google.trim().to_string(),
+        google_secret: google_secret.trim().to_string(),
         microsoft: microsoft.trim().to_string(),
     };
     std::fs::write(
@@ -131,6 +143,13 @@ pub fn sign_in(
     if client_id.is_empty() {
         return Err(missing_client_help(&provider));
     }
+    let client_secret = match provider.as_str() {
+        "google" => clients.google_secret,
+        _ => String::new(),
+    };
+    if provider == "google" && client_secret.is_empty() {
+        return Err(missing_google_secret_help());
+    }
 
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
@@ -155,12 +174,23 @@ pub fn sign_in(
     let code = rx
         .recv_timeout(WAIT)
         .map_err(|_| "Sign-in timed out. Try again from Settings.".to_string())??;
-    exchange_code(&provider, &client_id, &redirect, &code, &verifier)
+    exchange_code(
+        &provider,
+        &client_id,
+        &client_secret,
+        &redirect,
+        &code,
+        &verifier,
+    )
 }
 
 fn load_clients(app_data: &Path) -> ClientFile {
     let mut file = ClientFile {
         google: env_or_compile("BATELEUR_GOOGLE_OAUTH_CLIENT_ID", option_env!("BATELEUR_GOOGLE_OAUTH_CLIENT_ID")),
+        google_secret: env_or_compile(
+            "BATELEUR_GOOGLE_OAUTH_CLIENT_SECRET",
+            option_env!("BATELEUR_GOOGLE_OAUTH_CLIENT_SECRET"),
+        ),
         microsoft: env_or_compile(
             "BATELEUR_MICROSOFT_OAUTH_CLIENT_ID",
             option_env!("BATELEUR_MICROSOFT_OAUTH_CLIENT_ID"),
@@ -170,6 +200,9 @@ fn load_clients(app_data: &Path) -> ClientFile {
         if let Ok(stored) = serde_json::from_str::<ClientFile>(&raw) {
             if file.google.is_empty() {
                 file.google = stored.google;
+            }
+            if file.google_secret.is_empty() {
+                file.google_secret = stored.google_secret;
             }
             if file.microsoft.is_empty() {
                 file.microsoft = stored.microsoft;
@@ -192,7 +225,7 @@ fn env_or_compile(runtime: &str, compiled: Option<&str>) -> String {
 fn missing_client_help(provider: &str) -> String {
     match provider {
         "google" => {
-            "Sign in with Google needs a Desktop OAuth client ID. In Google Cloud Console: APIs & Services → Credentials → Create credentials → OAuth client ID → Desktop app. Paste it under OAuth client IDs in Settings, or set BATELEUR_GOOGLE_OAUTH_CLIENT_ID. Enable the Gmail API for that project (Bateleur still uses IMAP, not the Gmail API)."
+            "Sign in with Google needs a Desktop OAuth client ID and client secret. In Google Cloud Console: APIs & Services → Credentials → Create credentials → OAuth client ID → Desktop app. Paste both under OAuth client IDs in Settings, or set BATELEUR_GOOGLE_OAUTH_CLIENT_ID and BATELEUR_GOOGLE_OAUTH_CLIENT_SECRET. Enable the Gmail API for that project (Bateleur still uses IMAP, not the Gmail API)."
                 .into()
         }
         _ => {
@@ -200,6 +233,11 @@ fn missing_client_help(provider: &str) -> String {
                 .into()
         }
     }
+}
+
+fn missing_google_secret_help() -> String {
+    "Google Desktop OAuth still has a client secret, and the token host requires it. Paste it under OAuth client IDs in Settings (APIs & Services → Credentials → your Desktop client), or set BATELEUR_GOOGLE_OAUTH_CLIENT_SECRET."
+        .into()
 }
 
 fn loopback_redirect(provider: &str, port: u16) -> String {
@@ -253,17 +291,21 @@ fn token_url(provider: &str) -> &'static str {
 fn exchange_code(
     provider: &str,
     client_id: &str,
+    client_secret: &str,
     redirect: &str,
     code: &str,
     verifier: &str,
 ) -> Result<TokenBlob, String> {
-    let form = [
+    let mut form = vec![
         ("client_id", client_id),
         ("grant_type", "authorization_code"),
         ("code", code),
         ("redirect_uri", redirect),
         ("code_verifier", verifier),
     ];
+    if !client_secret.is_empty() {
+        form.push(("client_secret", client_secret));
+    }
     let parsed = post_token(token_url(provider), &form)?;
     if parsed.refresh_token.is_empty() {
         return Err("The provider did not return a refresh token. Sign in again and accept every permission.".into());
@@ -273,6 +315,7 @@ fn exchange_code(
         kind: "xoauth2".into(),
         provider: provider.into(),
         client_id: client_id.into(),
+        client_secret: client_secret.into(),
         refresh: parsed.refresh_token,
         access: parsed.access_token,
         expires_at: now_secs().saturating_add(parsed.expires_in.max(60)),
@@ -285,6 +328,7 @@ fn persist_blob(blob: &TokenBlob) -> Result<String, String> {
         kind: blob.kind.clone(),
         provider: blob.provider.clone(),
         client_id: blob.client_id.clone(),
+        client_secret: blob.client_secret.clone(),
         refresh: blob.refresh.clone(),
         access: String::new(),
         expires_at: 0,
@@ -297,11 +341,14 @@ fn refresh_if_needed(mut blob: TokenBlob) -> Result<TokenBlob, String> {
     if blob.expires_at > now.saturating_add(120) && !blob.access.is_empty() {
         return Ok(blob);
     }
-    let form = [
+    let mut form = vec![
         ("client_id", blob.client_id.as_str()),
         ("grant_type", "refresh_token"),
         ("refresh_token", blob.refresh.as_str()),
     ];
+    if !blob.client_secret.is_empty() {
+        form.push(("client_secret", blob.client_secret.as_str()));
+    }
     let parsed = post_token(token_url(&blob.provider), &form)?;
     blob.access = parsed.access_token;
     if !parsed.refresh_token.is_empty() {
@@ -527,6 +574,7 @@ mod tests {
             kind: "xoauth2".into(),
             provider: "microsoft".into(),
             client_id: "id".into(),
+            client_secret: "secret".into(),
             refresh: "refresh-token".into(),
             access: "very-long-access-jwt".into(),
             expires_at: 99,
@@ -535,6 +583,7 @@ mod tests {
         assert!(!raw.contains("very-long-access-jwt"));
         let loaded: TokenBlob = serde_json::from_str(&raw).unwrap();
         assert_eq!(loaded.refresh, "refresh-token");
+        assert_eq!(loaded.client_secret, "secret");
         assert!(loaded.access.is_empty());
         assert_eq!(loaded.expires_at, 0);
     }

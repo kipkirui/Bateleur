@@ -52,9 +52,11 @@ export function Settings({
     google: false,
     microsoft: false,
     googleClientId: "",
+    googleClientSecret: "",
     microsoftClientId: "",
   });
   const [googleClient, setGoogleClient] = useState("");
+  const [googleSecret, setGoogleSecret] = useState("");
   const [microsoftClient, setMicrosoftClient] = useState("");
   const [clientNote, setClientNote] = useState<string | null>(null);
   const [oauthPending, setOauthPending] = useState<"google" | "microsoft" | null>(null);
@@ -63,6 +65,7 @@ export function Settings({
     oauthStatus().then((status) => {
       setOauth(status);
       setGoogleClient(status.googleClientId);
+      setGoogleSecret(status.googleClientSecret);
       setMicrosoftClient(status.microsoftClientId);
     });
   }, []);
@@ -138,9 +141,10 @@ export function Settings({
     try {
       if (
         googleClient.trim() !== oauth.googleClientId ||
+        googleSecret.trim() !== oauth.googleClientSecret ||
         microsoftClient.trim() !== oauth.microsoftClientId
       ) {
-        const status = await saveOAuthClients(googleClient, microsoftClient);
+        const status = await saveOAuthClients(googleClient, googleSecret, microsoftClient);
         setOauth(status);
         setClientNote("Client IDs saved on this computer.");
       }
@@ -363,10 +367,15 @@ export function Settings({
 
           <h3>OAuth client IDs</h3>
           <p className="muted">
-            Public Desktop / public-client IDs, not secrets. Needed once so Sign
-            in can open Google or Microsoft. You can also set{" "}
-            <code>BATELEUR_GOOGLE_OAUTH_CLIENT_ID</code> and{" "}
+            Needed once so Sign in can open Google or Microsoft. You can also set{" "}
+            <code>BATELEUR_GOOGLE_OAUTH_CLIENT_ID</code>,{" "}
+            <code>BATELEUR_GOOGLE_OAUTH_CLIENT_SECRET</code>, and{" "}
             <code>BATELEUR_MICROSOFT_OAUTH_CLIENT_ID</code>.
+          </p>
+          <p className="muted">
+            Google: APIs &amp; Services → Credentials → OAuth client ID → Desktop
+            app. Paste the client ID and the client secret. Google still issues a
+            secret for Desktop apps, and the token host requires it.
           </p>
           <p className="muted">
             Microsoft: Azure → App registrations → New registration. Authentication
@@ -385,6 +394,15 @@ export function Settings({
             />
           </label>
           <label>
+            Google client secret
+            <SecretField
+              value={googleSecret}
+              onChange={setGoogleSecret}
+              placeholder="Desktop client secret"
+              autoComplete="off"
+            />
+          </label>
+          <label>
             Microsoft application ID
             <input
               value={microsoftClient}
@@ -396,8 +414,8 @@ export function Settings({
           {clientNote ? <p className="muted">{clientNote}</p> : null}
           {!oauth.google && !oauth.microsoft ? (
             <p className="muted">
-              Sign in is off until a client ID is saved. App passwords still
-              work.
+              Sign in is off until a client ID is saved. Google also needs its
+              client secret. App passwords still work.
             </p>
           ) : null}
           <footer className="form-footer">
@@ -405,7 +423,7 @@ export function Settings({
               type="button"
               className="text-btn"
               onClick={() => {
-                saveOAuthClients(googleClient, microsoftClient)
+                saveOAuthClients(googleClient, googleSecret, microsoftClient)
                   .then((status) => {
                     setOauth(status);
                     setClientNote("Client IDs saved on this computer.");

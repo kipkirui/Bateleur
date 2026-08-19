@@ -17,6 +17,7 @@ import type { AccountDraft, Clipping, DraftAttachment, FeedId, FlagChange, Mailb
 import type { MailTo } from "./lib/links";
 import { loadRemoteImagesPref, saveRemoteImagesPref } from "./lib/prefs";
 import { loadPaper, PAPER_STOCKS, savePaper, type PaperStock } from "./lib/paper";
+import { newestFirst } from "./lib/magazine";
 import { fromMessage, forwardSubject, hasReplyAll, ownAddresses, replyAllParts, replySubject, replyTo, withQuote, type ComposeQuote } from "./lib/quote";
 import {
   bumpReceipt,
@@ -236,45 +237,44 @@ export default function App() {
   const visible = useMemo(() => {
     if (storyFilter) {
       const story = stories.find((item) => item.id === storyFilter);
-      return story?.messages ?? [];
+      return newestFirst(story?.messages ?? []);
     }
     if (feed === "awaiting") {
-      return awaiting
-        .map((item) => item.message)
-        .filter((message) => !hiddenIds.has(message.id));
+      return newestFirst(
+        awaiting
+          .map((item) => item.message)
+          .filter((message) => !hiddenIds.has(message.id)),
+      );
     }
     if (feed === "radar") {
-      return inbox
-        .filter((m) => m.invite && m.folder !== "junk")
-        .slice()
-        .sort((a, b) => {
-          const left = a.invite?.startsAt ?? a.receivedAt;
-          const right = b.invite?.startsAt ?? b.receivedAt;
-          return left.localeCompare(right);
-        });
+      return newestFirst(
+        inbox.filter((m) => m.invite && m.folder !== "junk"),
+      );
     }
-    return messages.filter((m) => {
-      if (accountId && m.accountId !== accountId) return false;
-      if (hiddenIds.has(m.id)) return false;
-      if (feed === "sent" || feed === "drafts" || feed === "junk" || feed === "archive") {
-        return m.folder === feed;
-      }
-      if (feed.startsWith("custom:")) return m.folder === feed;
-      if (m.folder !== "inbox") return false;
-      if (m.feed !== feed) return false;
-      return true;
-    });
+    return newestFirst(
+      messages.filter((m) => {
+        if (accountId && m.accountId !== accountId) return false;
+        if (hiddenIds.has(m.id)) return false;
+        if (feed === "sent" || feed === "drafts" || feed === "junk" || feed === "archive") {
+          return m.folder === feed;
+        }
+        if (feed.startsWith("custom:")) return m.folder === feed;
+        if (m.folder !== "inbox") return false;
+        if (m.feed !== feed) return false;
+        return true;
+      }),
+    );
   }, [messages, accountId, feed, hiddenIds, awaiting, storyFilter, stories, inbox]);
 
   const digest = useMemo(() => {
     if (feed !== "action" || storyFilter) return [];
-    return messages
-      .filter((m) => {
+    return newestFirst(
+      messages.filter((m) => {
         if (accountId && m.accountId !== accountId) return false;
         if (hiddenIds.has(m.id)) return false;
         return m.folder === "inbox" && m.feed === "reading";
-      })
-      .slice(0, 6);
+      }),
+    ).slice(0, 6);
   }, [messages, accountId, feed, hiddenIds, storyFilter]);
 
   const persistStories = useCallback((next: Record<string, StoryOverride>) => {

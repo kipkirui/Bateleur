@@ -1,4 +1,5 @@
 import { readableText } from "./emailHtml";
+import { newestFirst } from "./magazine";
 import { subjectRoot } from "./waiting";
 import type { Message } from "../types";
 
@@ -69,7 +70,7 @@ export function groupStories(
     }
   }
   const stories = order.map((id) => {
-    const list = buckets.get(id) ?? [];
+    const list = newestFirst(buckets.get(id) ?? []);
     const named = overrides[id]?.title?.trim();
     return {
       id,
@@ -78,7 +79,11 @@ export function groupStories(
       messages: list,
     };
   });
-  stories.sort((a, b) => Number(b.pinned) - Number(a.pinned));
+  stories.sort((a, b) => {
+    const pin = Number(b.pinned) - Number(a.pinned);
+    if (pin !== 0) return pin;
+    return (b.messages[0]?.receivedAt ?? "").localeCompare(a.messages[0]?.receivedAt ?? "");
+  });
   return stories;
 }
 

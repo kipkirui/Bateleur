@@ -78,19 +78,20 @@ export async function addAccountOAuth(
 
 export async function oauthStatus(): Promise<OAuthStatus> {
   if (!isTauri()) {
-    return { google: false, microsoft: false, googleClientId: "", microsoftClientId: "" };
+    return { google: false, microsoft: false, googleClientId: "", googleClientSecret: "", microsoftClientId: "" };
   }
   return invoke<OAuthStatus>("oauth_status");
 }
 
 export async function saveOAuthClients(
   google: string,
+  googleSecret: string,
   microsoft: string,
 ): Promise<OAuthStatus> {
   if (!isTauri()) {
     throw new Error("OAuth client IDs need the desktop app.");
   }
-  return invoke<OAuthStatus>("save_oauth_clients", { google, microsoft });
+  return invoke<OAuthStatus>("save_oauth_clients", { google, googleSecret, microsoft });
 }
 
 export async function syncAccount(accountId: string): Promise<Mailbox> {

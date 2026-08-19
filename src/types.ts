@@ -112,6 +112,7 @@ export type OAuthStatus = {
   google: boolean;
   microsoft: boolean;
   googleClientId: string;
+  googleClientSecret: string;
   microsoftClientId: string;
 };
 

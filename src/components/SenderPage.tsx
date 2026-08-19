@@ -1,5 +1,5 @@
 import { readableText } from "../lib/emailHtml";
-import { formatWhen, sendFrequency } from "../lib/magazine";
+import { formatWhen, newestFirst, sendFrequency } from "../lib/magazine";
 import { Avatar } from "./Avatar";
 import type { Message } from "../types";
 
@@ -20,8 +20,9 @@ export function SenderPage({
   onAlwaysReading,
   onGuessAgain,
 }: Props) {
-  const name = messages[0] ? readableText(messages[0].fromName) : email;
-  const inbox = messages.filter((m) => m.folder === "inbox");
+  const listed = newestFirst(messages);
+  const name = listed[0] ? readableText(listed[0].fromName) : email;
+  const inbox = listed.filter((m) => m.folder === "inbox");
   const locked = inbox.length > 0 && inbox.every((m) => m.feed === "reading");
 
   return (
@@ -54,10 +55,10 @@ export function SenderPage({
         </div>
         <div className="block">
           <h2>From this sender</h2>
-          {messages.length === 0 ? (
+          {listed.length === 0 ? (
             <p className="muted">No cached letters from this address.</p>
           ) : (
-            messages.map((message) => (
+            listed.map((message) => (
               <button
                 key={message.id}
                 type="button"

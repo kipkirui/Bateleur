@@ -8,6 +8,18 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.26.7] - 2026-08-19
+
+### Fixed
+
+- Sign in with Google sends the Desktop client secret on the token request. Google still issues one for Desktop apps; paste it next to the client ID in Settings
+
+## [0.26.6] - 2026-08-19
+
+### Fixed
+
+- Feeds, stories, Back issues, Radar, and sender pages list newest received first. A thread in the reader still reads oldest to newest
+
 ## [0.26.5] - 2026-08-18
 
 ### Fixed

@@ -146,10 +146,11 @@ fn oauth_status(app: AppHandle) -> Result<oauth::OAuthStatus, String> {
 fn save_oauth_clients(
     app: AppHandle,
     google: String,
+    google_secret: String,
     microsoft: String,
 ) -> Result<oauth::OAuthStatus, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    oauth::save_clients(&dir, google, microsoft)?;
+    oauth::save_clients(&dir, google, google_secret, microsoft)?;
     Ok(oauth::status(&dir))
 }
 

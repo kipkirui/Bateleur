@@ -1,7 +1,7 @@
 {
   "name": "bateleur",
   "private": true,
-  "version": "0.26.5",
+  "version": "0.26.7",
   "license": "MIT",
   "author": "Kipkirui",
   "description": "Local-first desktop mail client. Magazine feed, any IMAP or POP mailbox, optional BYOK staff.",

@@ -43,6 +43,14 @@ export function readingTime(message: Message): string {
   return minutes === 1 ? "1 min read" : `${minutes} min read`;
 }
 
+export function newestFirst(messages: Message[]): Message[] {
+  return [...messages].sort((a, b) => {
+    const diff = Date.parse(b.receivedAt) - Date.parse(a.receivedAt);
+    if (Number.isFinite(diff) && diff !== 0) return diff;
+    return b.id.localeCompare(a.id);
+  });
+}
+
 export function sendFrequency(messages: Message[], email: string): string {
   const from = messages
     .filter((m) => m.fromEmail.toLowerCase() === email.toLowerCase())
@@ -85,11 +93,14 @@ export function groupIssues(messages: Message[]): { id: string; title: string; m
   }
   return [...buckets.entries()]
     .sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([id, list]) => ({
-      id,
-      title: issueLabel(list[0]?.receivedAt ?? id),
-      messages: list,
-    }));
+    .map(([id, list]) => {
+      const ordered = newestFirst(list);
+      return {
+        id,
+        title: issueLabel(ordered[0]?.receivedAt ?? id),
+        messages: ordered,
+      };
+    });
 }
 
 function splitSentences(text: string): string[] {
