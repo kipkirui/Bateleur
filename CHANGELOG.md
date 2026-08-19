@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.26.11] - 2026-08-19
+
+### Fixed
+
+- Wheel and arrow keys over an HTML letter scroll the reader again. The letter iframe stays sandboxed without `allow-scripts`; that console line is the browser refusing newsletter JavaScript, not a broken scroller
+
 ## [0.26.10] - 2026-08-19
 
 ### Fixed

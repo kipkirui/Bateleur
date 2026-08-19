@@ -127,6 +127,35 @@ function HtmlLetter({
         if (event.target instanceof HTMLImageElement) event.preventDefault();
       };
       doc.addEventListener("dragstart", onDragStart);
+      const onWheel = (event: WheelEvent) => {
+        scrollReader(iframe, event.deltaX, event.deltaY, event.deltaMode);
+        event.preventDefault();
+      };
+      const onKey = (event: KeyboardEvent) => {
+        if (event.defaultPrevented) return;
+        if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
+        const pane = iframe.closest(".reader");
+        if (!(pane instanceof HTMLElement)) return;
+        const page = Math.max(pane.clientHeight * 0.9, 40);
+        let dy = 0;
+        if (event.key === "ArrowDown") dy = 48;
+        else if (event.key === "ArrowUp") dy = -48;
+        else if (event.key === "PageDown" || event.key === " ") dy = page;
+        else if (event.key === "PageUp") dy = -page;
+        else if (event.key === "Home") {
+          pane.scrollTop = 0;
+          event.preventDefault();
+          return;
+        } else if (event.key === "End") {
+          pane.scrollTop = pane.scrollHeight;
+          event.preventDefault();
+          return;
+        } else return;
+        pane.scrollTop += dy;
+        event.preventDefault();
+      };
+      doc.addEventListener("wheel", onWheel, { passive: false });
+      doc.addEventListener("keydown", onKey);
       let last = 0;
       let frame = 0;
       let held = false;
@@ -169,6 +198,8 @@ function HtmlLetter({
         doc.removeEventListener("mouseup", onSelect);
         doc.removeEventListener("keyup", onSelect);
         doc.removeEventListener("dragstart", onDragStart);
+        doc.removeEventListener("wheel", onWheel);
+        doc.removeEventListener("keydown", onKey);
         doc.removeEventListener("pointerdown", onDown);
         doc.removeEventListener("pointerup", onUp);
         doc.removeEventListener("pointercancel", onUp);
@@ -248,4 +279,25 @@ async function handleHref(href: string, onMailTo: (mail: MailTo) => void) {
   if (isHttpUrl(href)) {
     await openExternal(href);
   }
+}
+
+function scrollReader(
+  iframe: HTMLIFrameElement,
+  deltaX: number,
+  deltaY: number,
+  deltaMode: number,
+) {
+  const pane = iframe.closest(".reader");
+  if (!(pane instanceof HTMLElement)) return;
+  let x = deltaX;
+  let y = deltaY;
+  if (deltaMode === 1) {
+    x *= 16;
+    y *= 16;
+  } else if (deltaMode === 2) {
+    x *= pane.clientWidth;
+    y *= pane.clientHeight;
+  }
+  pane.scrollTop += y;
+  pane.scrollLeft += x;
 }
