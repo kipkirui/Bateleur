@@ -1440,6 +1440,7 @@ kbd {
   border: 1px solid var(--rule);
   width: min(800px, 100%);
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 24px 32px 32px;
   max-height: calc(100vh - 64px);
 }
@@ -1527,6 +1528,7 @@ kbd {
   margin: 16px 0 8px;
   border: 0;
   background: #fff;
+  overflow: hidden;
 }
 
 .letter-switch {

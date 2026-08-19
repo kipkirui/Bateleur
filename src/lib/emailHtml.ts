@@ -272,13 +272,17 @@ function wrapEmailDocument(cssParts: string[], body: string): string {
   <head>
     <meta charset="utf-8" />
     <meta name="referrer" content="no-referrer" />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="color-scheme" content="light" />
     <meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; base-uri 'none'" />
     <style>
-      html, body { margin: 0; padding: 0; }
+      html { color-scheme: light; }
+      html, body { margin: 0; padding: 0; background: #fff; }
       img { max-width: 100% !important; height: auto !important; }
     </style>
     ${author}
+    <style>
+      html { color-scheme: light !important; }
+    </style>
   </head>
   <body>${body}</body>
 </html>`;
@@ -291,6 +295,8 @@ function scrubCss(css: string, remoteImages = false): string {
     .replace(/javascript\s*:/gi, "")
     .replace(/-moz-binding\s*:[^;]+;?/gi, "")
     .replace(/behavior\s*:[^;]+;?/gi, "")
+    .replace(/color-scheme\s*:[^;]+;?/gi, "color-scheme: light;")
+    .replace(/supported-color-schemes\s*:[^;]+;?/gi, "supported-color-schemes: light;")
     .replace(/<\/style/gi, "");
   if (!remoteImages) {
     out = out.replace(/url\s*\(\s*(['"]?)(?:https?:)?\/\/[^)]+\1\s*\)/gi, "none");

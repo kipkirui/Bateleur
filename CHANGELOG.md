@@ -8,6 +8,12 @@ Before 1.0, **minor** versions are user-visible mail surfaces. **Patch** version
 are fixes. Keep `package.json`, `src-tauri/tauri.conf.json`,
 `src-tauri/Cargo.toml`, and `crates/bateleur-core/Cargo.toml` on the same number.
 
+## [0.26.8] - 2026-08-19
+
+### Fixed
+
+- Newsletters no longer pick up OS dark mode (forced light color-scheme in the letter iframe). Opening a letter no longer stretch-resizes as the iframe guesses its height
+
 ## [0.26.7] - 2026-08-19
 
 ### Fixed

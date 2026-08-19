@@ -123,19 +123,35 @@ function HtmlLetter({
       };
       doc.addEventListener("mouseup", onSelect);
       doc.addEventListener("keyup", onSelect);
+      let last = 0;
+      let frame = 0;
       const resize = () => {
-        const height = Math.max(
-          doc.documentElement.scrollHeight,
-          doc.body?.scrollHeight ?? 0,
-          120,
-        );
-        iframe.style.height = `${height}px`;
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          const height = Math.max(
+            doc.body?.scrollHeight ?? 0,
+            doc.body?.offsetHeight ?? 0,
+            120,
+          );
+          if (Math.abs(height - last) < 2) return;
+          last = height;
+          iframe.style.height = `${height}px`;
+        });
       };
       resize();
+      requestAnimationFrame(resize);
       const observer = new ResizeObserver(resize);
-      observer.observe(doc.documentElement);
       if (doc.body) observer.observe(doc.body);
+      for (const img of doc.images) {
+        if (img.complete) continue;
+        img.addEventListener("load", resize, { once: true });
+        img.addEventListener("error", resize, { once: true });
+      }
+      const fonts = doc.fonts?.ready;
+      if (fonts) void fonts.then(resize);
       return () => {
+        cancelAnimationFrame(frame);
         doc.removeEventListener("click", onClick, true);
         doc.removeEventListener("mouseup", onSelect);
         doc.removeEventListener("keyup", onSelect);
@@ -149,7 +165,6 @@ function HtmlLetter({
       cleanup = bind();
     };
     iframe.addEventListener("load", onLoad);
-    if (iframe.contentDocument?.readyState === "complete") onLoad();
     return () => {
       iframe.removeEventListener("load", onLoad);
       cleanup?.();
